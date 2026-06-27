@@ -508,6 +508,16 @@ function renderAll() { renderSong(); renderTracks(); }
 syncTransportUI();
 renderAll();
 
+// Safety net: unlock audio on the very first touch/click anywhere, so iOS has
+// already warmed up the context by the time the user hits play or a cell.
+function firstGestureUnlock() {
+  engine.resume();
+  document.removeEventListener('touchend', firstGestureUnlock);
+  document.removeEventListener('pointerdown', firstGestureUnlock);
+}
+document.addEventListener('touchend', firstGestureUnlock, { once: true });
+document.addEventListener('pointerdown', firstGestureUnlock, { once: true });
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

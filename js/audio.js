@@ -55,6 +55,25 @@ export class ChiptuneEngine {
   resume() {
     if (!this.ctx) this._init();
     if (this.ctx.state === 'suspended') this.ctx.resume();
+    this._unlock();
+  }
+
+  // iOS Safari needs an explicit nudge inside the first user gesture: resume
+  // the context and play a one-sample silent buffer. Without this the very
+  // first scheduled notes can be dropped while the context is still warming up.
+  _unlock() {
+    if (this._unlocked || !this.ctx) return;
+    this._unlocked = true;
+    try {
+      const buf = this.ctx.createBuffer(1, 1, 22050);
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(this.ctx.destination);
+      src.start(0);
+    } catch (e) { /* ignore */ }
+    // Re-resume on the next gesture if iOS suspended us again (e.g. after
+    // backgrounding the tab).
+    if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
   _init() {
