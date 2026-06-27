@@ -252,6 +252,7 @@ function renderLibraryBar() {
 
   const tools = document.createElement('div');
   tools.className = 'song-tools';
+  tools.appendChild(iconBtn('✨', 'Génération auto', openGenerateModal));
   tools.appendChild(iconBtn('💾', 'Sauvegarder', () => {
     const n = prompt('Nom du morceau :', state.name);
     if (n && saveSong(n)) { renderSong(); toast(`« ${state.name} » sauvegardé`); }
@@ -509,6 +510,213 @@ function buildMidiBlob() {
   const header = [0x4D, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, (ntrk >> 8) & 255, ntrk & 255, (PPQ >> 8) & 255, PPQ & 255];
   const all = header.concat(...chunks);
   return new Blob([new Uint8Array(all)], { type: 'audio/midi' });
+}
+
+// ============================================================================
+// Auto-generation of coherent musical phrases
+// ============================================================================
+const SCALES = {
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+  penta: [0, 3, 5, 7, 10], // minor pentatonic
+};
+// Diatonic chord progressions as scale-degree indices.
+const PROGS = {
+  major: [[0, 4, 5, 3], [0, 3, 4, 4], [5, 3, 0, 4], [3, 4, 0, 0]],
+  minor: [[0, 5, 2, 6], [0, 3, 4, 4], [0, 6, 5, 5], [0, 5, 6, 3]],
+  penta: [[0, 3, 4, 0], [0, 0, 3, 4]],
+};
+const ROOT_NAMES = ['Do', 'Do#', 'Ré', 'Ré#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
+
+let genOpts = { scale: 'minor', root: null, density: 'normal', tracks: { drum: true, bass: true, lead: true, lead2: false } };
+
+const rand = (a) => a[Math.floor(Math.random() * a.length)];
+function degToMidi(rootMidi, scale, degree) {
+  const len = scale.length;
+  const oct = Math.floor(degree / len);
+  const idx = ((degree % len) + len) % len;
+  return rootMidi + oct * 12 + scale[idx];
+}
+function fitRange(m, lo, hi) { while (m < lo) m += 12; while (m > hi) m -= 12; return m; }
+
+function generate(opts) {
+  const scale = SCALES[opts.scale] || SCALES.minor;
+  const rootPC = opts.root == null ? Math.floor(Math.random() * 12) : opts.root;
+  const prog = rand(PROGS[opts.scale] || PROGS.minor);
+  const steps = state.steps;
+  const spb = Math.max(1, Math.floor(steps / 4));
+  const numChords = steps >= 16 ? 4 : steps >= 8 ? 2 : 1;
+  const segLen = steps / numChords;
+  const dens = opts.density || 'normal';
+  const leadProb = dens === 'sparse' ? 0.4 : dens === 'dense' ? 0.85 : 0.6;
+  const p = editP();
+  const chordAt = (s) => prog[Math.min(numChords - 1, Math.floor(s / segLen))];
+
+  if (opts.tracks.drum) {
+    for (const lane of DRUM_LANES) p.drum[lane.id] = new Array(steps).fill(false);
+    const set = (lane, s) => { if (s >= 0 && s < steps) p.drum[lane][s] = true; };
+    for (let s = 0; s < steps; s++) {
+      if (s % (2 * spb) === 0) set('kick', s);     // beats 1 & 3
+      if (s % (2 * spb) === spb) set('snare', s);  // beats 2 & 4
+    }
+    const hatEvery = dens === 'dense' ? 1 : dens === 'sparse' ? spb : Math.max(1, Math.floor(spb / 2));
+    for (let s = 0; s < steps; s += hatEvery) set('hat', s);
+    if (dens !== 'sparse') set('kick', Math.floor(2.5 * spb));        // syncopated kick
+    if (dens === 'dense') set('openhat', Math.max(0, steps - spb));
+  }
+
+  if (opts.tracks.bass) {
+    state.meta.bass.arp = 'off';
+    p.bass.cells = {};
+    const { lo, hi } = PT.bass; const rootMidi = 36 + rootPC;
+    for (let seg = 0; seg < numChords; seg++) {
+      const d = prog[seg];
+      const start = Math.round(seg * segLen);
+      const note = fitRange(degToMidi(rootMidi, scale, d), lo, hi);
+      p.bass.cells[`${note}:${start}`] = true;
+      if (dens !== 'sparse') {
+        const mid = Math.round(start + segLen / 2);
+        const fifth = fitRange(degToMidi(rootMidi, scale, d + 4), lo, hi);
+        if (mid < steps) p.bass.cells[`${fifth}:${mid}`] = true;
+      }
+      if (dens === 'dense') {
+        const q = Math.round(start + segLen * 0.75);
+        if (q < steps) p.bass.cells[`${note}:${q}`] = true;
+      }
+    }
+  }
+
+  if (opts.tracks.lead) {
+    state.meta.lead.arp = 'off';
+    p.lead.cells = {};
+    const { lo, hi } = PT.lead; const rootMidi = 60 + rootPC;
+    let prevDeg = 0;
+    const eighth = Math.max(1, Math.floor(spb / 2));
+    for (let s = 0; s < steps; s++) {
+      if (s % eighth !== 0) continue;
+      const strong = s % spb === 0;
+      const d = chordAt(s);
+      if (!strong && Math.random() >= leadProb) continue;
+      let deg;
+      if (strong) deg = rand([d, d + 2, d + 4]);
+      else deg = Math.random() < 0.4 ? rand([d, d + 2, d + 4]) : prevDeg + rand([-2, -1, 1, 2]);
+      prevDeg = deg;
+      const note = fitRange(degToMidi(rootMidi, scale, deg), lo, hi);
+      p.lead.cells[`${note}:${s}`] = true;
+    }
+  }
+
+  if (opts.tracks.lead2) {
+    state.meta.lead2.arp = 'off';
+    p.lead2.cells = {};
+    const { lo, hi } = PT.lead2; const rootMidi = 60 + rootPC;
+    for (let s = 0; s < steps; s++) {
+      const d = chordAt(s);
+      const triad = [d, d + 2, d + 4];
+      const note = fitRange(degToMidi(rootMidi, scale, triad[s % 3]), lo, hi);
+      p.lead2.cells[`${note}:${s}`] = true;
+    }
+  }
+
+  saveState();
+  syncTransportUI();
+  renderTracks();
+  renderSong();
+  const scaleLabel = opts.scale === 'major' ? 'majeur' : opts.scale === 'minor' ? 'mineur' : 'penta';
+  return `${ROOT_NAMES[rootPC]} ${scaleLabel}`;
+}
+
+function genPillGroup(label, options, get, set) {
+  const row = document.createElement('div');
+  row.className = 'track-tools';
+  row.innerHTML = `<span class="tools-label">${label}</span>`;
+  for (const [val, lbl] of options) {
+    const b = document.createElement('button');
+    b.className = 'pill' + (get() === val ? ' on' : '');
+    b.textContent = lbl;
+    b.addEventListener('click', () => {
+      set(val);
+      [...row.querySelectorAll('.pill')].forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
+    row.appendChild(b);
+  }
+  return row;
+}
+
+function openGenerateModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const head = document.createElement('div');
+  head.className = 'modal-head';
+  head.innerHTML = `<h2>✨ Génération auto</h2>`;
+  const close = document.createElement('button');
+  close.className = 'modal-close'; close.textContent = '✕';
+  close.addEventListener('click', () => overlay.remove());
+  head.appendChild(close);
+  modal.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'gen-body';
+
+  body.appendChild(genPillGroup('Gamme',
+    [['major', 'Majeur'], ['minor', 'Mineur'], ['penta', 'Penta']],
+    () => genOpts.scale, v => genOpts.scale = v));
+
+  const rootRow = document.createElement('div');
+  rootRow.className = 'track-tools';
+  rootRow.innerHTML = `<span class="tools-label">Tonalité</span>`;
+  const sel = document.createElement('select');
+  sel.className = 'gen-sel';
+  const optRand = document.createElement('option');
+  optRand.value = ''; optRand.textContent = 'Aléatoire';
+  sel.appendChild(optRand);
+  ROOT_NAMES.forEach((n, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = n; sel.appendChild(o); });
+  sel.value = genOpts.root == null ? '' : String(genOpts.root);
+  sel.addEventListener('change', () => { genOpts.root = sel.value === '' ? null : parseInt(sel.value, 10); });
+  rootRow.appendChild(sel);
+  body.appendChild(rootRow);
+
+  body.appendChild(genPillGroup('Densité',
+    [['sparse', 'Clair'], ['normal', 'Normal'], ['dense', 'Dense']],
+    () => genOpts.density, v => genOpts.density = v));
+
+  const trkRow = document.createElement('div');
+  trkRow.className = 'track-tools';
+  trkRow.innerHTML = `<span class="tools-label">Pistes</span>`;
+  for (const [id, lbl] of [['drum', 'Drum'], ['bass', 'Bass'], ['lead', 'Lead'], ['lead2', 'Lead 2']]) {
+    const b = document.createElement('button');
+    b.className = 'pill' + (genOpts.tracks[id] ? ' on' : '');
+    b.textContent = lbl;
+    b.addEventListener('click', () => { genOpts.tracks[id] = !genOpts.tracks[id]; b.classList.toggle('on', genOpts.tracks[id]); });
+    trkRow.appendChild(b);
+  }
+  body.appendChild(trkRow);
+
+  const note = document.createElement('p');
+  note.className = 'gen-note';
+  note.textContent = 'Génère dans le motif courant. Relance pour varier.';
+  body.appendChild(note);
+  modal.appendChild(body);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot';
+  const gen = document.createElement('button');
+  gen.className = 'song-btn wide';
+  gen.textContent = '✨ Générer';
+  gen.addEventListener('click', () => {
+    if (!Object.values(genOpts.tracks).some(Boolean)) { alert('Sélectionne au moins une piste'); return; }
+    const key = generate(genOpts);
+    toast('Généré en ' + key);
+  });
+  foot.appendChild(gen);
+  modal.appendChild(foot);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
 }
 
 // ============================================================================
