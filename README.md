@@ -111,6 +111,14 @@ dans le motif courant.
 - **Densité** : Clair / Normal / Dense
 - **Pistes** à remplir : Drum / Bass / Lead / Lead 2
 
+**Styles** (ambiances prédéfinies) : touche un style et ça pré-règle la gamme,
+le tempo, les formes d'onde (duty) et la densité — pour une couleur immédiate :
+- **Standard** (mineur), **Asiatique** (gamme japonaise *hirajoshi*),
+  **Médiéval** (*dorien*), **Spatial** (*tons entiers*, dents de scie, lent),
+  **Héroïque** (majeur, rapide, dense), **Donjon** (*phrygien*, sombre).
+
+Les sélecteurs Gamme / Densité restent modifiables ensuite pour affiner.
+
 **Structure** :
 - **1 motif** : remplit le motif courant.
 - **Couplet / Refrain** : génère 2 motifs (A, B) et une chaîne `A A B A B B`.

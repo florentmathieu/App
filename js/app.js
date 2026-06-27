@@ -519,14 +519,42 @@ function buildMidiBlob() {
 const SCALES = {
   major: [0, 2, 4, 5, 7, 9, 11],
   minor: [0, 2, 3, 5, 7, 8, 10],
-  penta: [0, 3, 5, 7, 10], // minor pentatonic
+  penta: [0, 3, 5, 7, 10],          // minor pentatonic
+  hirajoshi: [0, 2, 3, 7, 8],       // japanese
+  dorian: [0, 2, 3, 5, 7, 9, 10],   // medieval / folk
+  phrygian: [0, 1, 3, 5, 7, 8, 10], // dark / dungeon
+  lydian: [0, 2, 4, 6, 7, 9, 11],   // bright / dreamy
+  wholetone: [0, 2, 4, 6, 8, 10],   // floating / space
+  harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
 };
-// Diatonic chord progressions as scale-degree indices.
+// Chord progressions as scale-degree indices (valid for each scale's length).
 const PROGS = {
   major: [[0, 4, 5, 3], [0, 3, 4, 4], [5, 3, 0, 4], [3, 4, 0, 0]],
   minor: [[0, 5, 2, 6], [0, 3, 4, 4], [0, 6, 5, 5], [0, 5, 6, 3]],
   penta: [[0, 3, 4, 0], [0, 0, 3, 4]],
+  hirajoshi: [[0, 3, 4, 0], [0, 2, 4, 3], [0, 4, 2, 0]],
+  dorian: [[0, 3, 4, 4], [0, 6, 3, 0], [0, 4, 5, 3]],
+  phrygian: [[0, 1, 0, 5], [0, 6, 5, 0], [0, 5, 1, 0]],
+  lydian: [[0, 4, 1, 0], [0, 1, 4, 4], [0, 3, 4, 0]],
+  wholetone: [[0, 2, 4, 0], [0, 4, 2, 4], [0, 3, 5, 0]],
+  harmonicMinor: [[0, 3, 4, 4], [0, 5, 4, 0], [0, 3, 6, 4]],
 };
+const SCALE_LABELS = {
+  major: 'majeur', minor: 'mineur', penta: 'penta', hirajoshi: 'hirajoshi',
+  dorian: 'dorien', phrygian: 'phrygien', lydian: 'lydien',
+  wholetone: 'tons entiers', harmonicMinor: 'min. harmonique',
+};
+
+// Style presets: scale + tempo + density + per-track waveform/duty.
+const STYLES = {
+  standard:  { label: 'Standard',  scale: 'minor',     bpm: 120, density: 'normal', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.5 }, lead2: { type: 'square', duty: 0.25 } } },
+  asiatique: { label: 'Asiatique', scale: 'hirajoshi', bpm: 96,  density: 'sparse', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.5 }, lead2: { type: 'triangle' } } },
+  medieval:  { label: 'Médiéval',  scale: 'dorian',    bpm: 108, density: 'normal', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.5 }, lead2: { type: 'square', duty: 0.5 } } },
+  spatial:   { label: 'Spatial',   scale: 'wholetone', bpm: 84,  density: 'sparse', waves: { bass: { type: 'sawtooth' }, lead: { type: 'sawtooth' }, lead2: { type: 'triangle' } } },
+  heroique:  { label: 'Héroïque',  scale: 'major',     bpm: 140, density: 'dense',  waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.25 }, lead2: { type: 'square', duty: 0.25 } } },
+  donjon:    { label: 'Donjon',    scale: 'phrygian',  bpm: 92,  density: 'normal', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.125 }, lead2: { type: 'triangle' } } },
+};
+
 const ROOT_NAMES = ['Do', 'Do#', 'Ré', 'Ré#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
 
 // Song structures: a set of section patterns (with their own density +
@@ -550,7 +578,26 @@ const SONG_FORMS = {
   },
 };
 
-let genOpts = { scale: 'minor', root: null, density: 'normal', form: 'single', tracks: { drum: true, bass: true, lead: true, lead2: true } };
+let genOpts = { scale: 'minor', root: null, density: 'normal', form: 'single', style: null, tracks: { drum: true, bass: true, lead: true, lead2: true } };
+
+function applyStyle(id) {
+  const st = STYLES[id];
+  if (!st) return;
+  genOpts.style = id;
+  genOpts.scale = st.scale;
+  genOpts.density = st.density;
+  state.bpm = st.bpm;
+  for (const [tid, w] of Object.entries(st.waves)) {
+    if (!state.meta[tid]) continue;
+    if (w.type) state.meta[tid].type = w.type;
+    if (w.duty != null) state.meta[tid].duty = w.duty;
+  }
+  saveState();
+  syncTransportUI();
+  renderTracks();
+  renderSong();
+  toast('Style : ' + st.label);
+}
 
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 function degToMidi(rootMidi, scale, degree) {
@@ -561,7 +608,7 @@ function degToMidi(rootMidi, scale, degree) {
 }
 function fitRange(m, lo, hi) { while (m < lo) m += 12; while (m > hi) m -= 12; return m; }
 function keyLabel(rootPC, scale) {
-  return `${ROOT_NAMES[rootPC]} ${scale === 'major' ? 'majeur' : scale === 'minor' ? 'mineur' : 'penta'}`;
+  return `${ROOT_NAMES[rootPC]} ${SCALE_LABELS[scale] || scale}`;
 }
 
 // Fill one pattern object with a coherent phrase. ctx carries the shared key
@@ -713,6 +760,19 @@ function openGenerateModal() {
 
   const body = document.createElement('div');
   body.className = 'gen-body';
+
+  // Style presets (apply scale/tempo/waveforms, then refresh the modal)
+  const styleRow = document.createElement('div');
+  styleRow.className = 'track-tools';
+  styleRow.innerHTML = `<span class="tools-label">Style</span>`;
+  for (const [id, st] of Object.entries(STYLES)) {
+    const b = document.createElement('button');
+    b.className = 'pill' + (genOpts.style === id ? ' on' : '');
+    b.textContent = st.label;
+    b.addEventListener('click', () => { applyStyle(id); overlay.remove(); openGenerateModal(); });
+    styleRow.appendChild(b);
+  }
+  body.appendChild(styleRow);
 
   body.appendChild(genPillGroup('Structure',
     [['single', '1 motif'], ['verseChorus', 'Couplet/Refrain'], ['full', 'Morceau complet']],
