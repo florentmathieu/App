@@ -96,6 +96,15 @@ dans le motif courant.
 - **Densité** : Clair / Normal / Dense
 - **Pistes** à remplir : Drum / Bass / Lead / Lead 2
 
+**Structure** :
+- **1 motif** : remplit le motif courant.
+- **Couplet / Refrain** : génère 2 motifs (A, B) et une chaîne `A A B A B B`.
+- **Morceau complet** : génère 4 motifs (Intro / Couplet / Refrain / Pont) et
+  une chaîne arrangée `A B C B C D C`. Tous les motifs partagent la **même
+  tonalité** ; chaque section a sa densité et son instrumentation (l'intro est
+  clairsemée sans lead, le refrain est dense avec arpège, etc.).
+  ⚠️ Le mode morceau remplace les motifs et la chaîne existants.
+
 La logique est musicale, pas du bruit aléatoire :
 - une **progression d'accords diatonique** est tirée dans la gamme/tonalité ;
 - la **basse** suit les fondamentales (et la quinte selon la densité) ;

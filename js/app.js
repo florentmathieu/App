@@ -528,7 +528,28 @@ const PROGS = {
 };
 const ROOT_NAMES = ['Do', 'Do#', 'Ré', 'Ré#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
 
-let genOpts = { scale: 'minor', root: null, density: 'normal', tracks: { drum: true, bass: true, lead: true, lead2: false } };
+// Song structures: a set of section patterns (with their own density +
+// instrumentation) plus a chain arranging them into a form.
+const SONG_FORMS = {
+  verseChorus: {
+    sections: [
+      { label: 'Couplet', density: 'normal', tracks: { drum: 1, bass: 1, lead: 1, lead2: 0 } },
+      { label: 'Refrain', density: 'dense',  tracks: { drum: 1, bass: 1, lead: 1, lead2: 1 } },
+    ],
+    chain: [0, 0, 1, 0, 1, 1],
+  },
+  full: {
+    sections: [
+      { label: 'Intro',   density: 'sparse', tracks: { drum: 1, bass: 1, lead: 0, lead2: 0 } },
+      { label: 'Couplet', density: 'normal', tracks: { drum: 1, bass: 1, lead: 1, lead2: 0 } },
+      { label: 'Refrain', density: 'dense',  tracks: { drum: 1, bass: 1, lead: 1, lead2: 1 } },
+      { label: 'Pont',    density: 'normal', tracks: { drum: 1, bass: 1, lead: 0, lead2: 1 } },
+    ],
+    chain: [0, 1, 2, 1, 2, 3, 2],
+  },
+};
+
+let genOpts = { scale: 'minor', root: null, density: 'normal', form: 'single', tracks: { drum: true, bass: true, lead: true, lead2: true } };
 
 const rand = (a) => a[Math.floor(Math.random() * a.length)];
 function degToMidi(rootMidi, scale, degree) {
@@ -538,55 +559,52 @@ function degToMidi(rootMidi, scale, degree) {
   return rootMidi + oct * 12 + scale[idx];
 }
 function fitRange(m, lo, hi) { while (m < lo) m += 12; while (m > hi) m -= 12; return m; }
+function keyLabel(rootPC, scale) {
+  return `${ROOT_NAMES[rootPC]} ${scale === 'major' ? 'majeur' : scale === 'minor' ? 'mineur' : 'penta'}`;
+}
 
-function generate(opts) {
-  const scale = SCALES[opts.scale] || SCALES.minor;
-  const rootPC = opts.root == null ? Math.floor(Math.random() * 12) : opts.root;
-  const prog = rand(PROGS[opts.scale] || PROGS.minor);
-  const steps = state.steps;
-  const spb = Math.max(1, Math.floor(steps / 4));
-  const numChords = steps >= 16 ? 4 : steps >= 8 ? 2 : 1;
-  const segLen = steps / numChords;
-  const dens = opts.density || 'normal';
-  const leadProb = dens === 'sparse' ? 0.4 : dens === 'dense' ? 0.85 : 0.6;
-  const p = editP();
+// Fill one pattern object with a coherent phrase. ctx carries the shared key
+// plus this section's density/tracks.
+function fillPattern(p, ctx) {
+  const { scaleArr, rootPC, prog, steps, spb, numChords, segLen, density, tracks } = ctx;
+  const leadProb = density === 'sparse' ? 0.4 : density === 'dense' ? 0.85 : 0.6;
   const chordAt = (s) => prog[Math.min(numChords - 1, Math.floor(s / segLen))];
 
-  if (opts.tracks.drum) {
+  if (tracks.drum) {
     for (const lane of DRUM_LANES) p.drum[lane.id] = new Array(steps).fill(false);
     const set = (lane, s) => { if (s >= 0 && s < steps) p.drum[lane][s] = true; };
     for (let s = 0; s < steps; s++) {
-      if (s % (2 * spb) === 0) set('kick', s);     // beats 1 & 3
-      if (s % (2 * spb) === spb) set('snare', s);  // beats 2 & 4
+      if (s % (2 * spb) === 0) set('kick', s);
+      if (s % (2 * spb) === spb) set('snare', s);
     }
-    const hatEvery = dens === 'dense' ? 1 : dens === 'sparse' ? spb : Math.max(1, Math.floor(spb / 2));
+    const hatEvery = density === 'dense' ? 1 : density === 'sparse' ? spb : Math.max(1, Math.floor(spb / 2));
     for (let s = 0; s < steps; s += hatEvery) set('hat', s);
-    if (dens !== 'sparse') set('kick', Math.floor(2.5 * spb));        // syncopated kick
-    if (dens === 'dense') set('openhat', Math.max(0, steps - spb));
+    if (density !== 'sparse') set('kick', Math.floor(2.5 * spb));
+    if (density === 'dense') set('openhat', Math.max(0, steps - spb));
   }
 
-  if (opts.tracks.bass) {
+  if (tracks.bass) {
     state.meta.bass.arp = 'off';
     p.bass.cells = {};
     const { lo, hi } = PT.bass; const rootMidi = 36 + rootPC;
     for (let seg = 0; seg < numChords; seg++) {
       const d = prog[seg];
       const start = Math.round(seg * segLen);
-      const note = fitRange(degToMidi(rootMidi, scale, d), lo, hi);
+      const note = fitRange(degToMidi(rootMidi, scaleArr, d), lo, hi);
       p.bass.cells[`${note}:${start}`] = true;
-      if (dens !== 'sparse') {
+      if (density !== 'sparse') {
         const mid = Math.round(start + segLen / 2);
-        const fifth = fitRange(degToMidi(rootMidi, scale, d + 4), lo, hi);
+        const fifth = fitRange(degToMidi(rootMidi, scaleArr, d + 4), lo, hi);
         if (mid < steps) p.bass.cells[`${fifth}:${mid}`] = true;
       }
-      if (dens === 'dense') {
+      if (density === 'dense') {
         const q = Math.round(start + segLen * 0.75);
         if (q < steps) p.bass.cells[`${note}:${q}`] = true;
       }
     }
   }
 
-  if (opts.tracks.lead) {
+  if (tracks.lead) {
     state.meta.lead.arp = 'off';
     p.lead.cells = {};
     const { lo, hi } = PT.lead; const rootMidi = 60 + rootPC;
@@ -597,33 +615,66 @@ function generate(opts) {
       const strong = s % spb === 0;
       const d = chordAt(s);
       if (!strong && Math.random() >= leadProb) continue;
-      let deg;
-      if (strong) deg = rand([d, d + 2, d + 4]);
-      else deg = Math.random() < 0.4 ? rand([d, d + 2, d + 4]) : prevDeg + rand([-2, -1, 1, 2]);
+      let deg = strong ? rand([d, d + 2, d + 4])
+        : (Math.random() < 0.4 ? rand([d, d + 2, d + 4]) : prevDeg + rand([-2, -1, 1, 2]));
       prevDeg = deg;
-      const note = fitRange(degToMidi(rootMidi, scale, deg), lo, hi);
-      p.lead.cells[`${note}:${s}`] = true;
+      p.lead.cells[`${fitRange(degToMidi(rootMidi, scaleArr, deg), lo, hi)}:${s}`] = true;
     }
   }
 
-  if (opts.tracks.lead2) {
+  if (tracks.lead2) {
     state.meta.lead2.arp = 'off';
     p.lead2.cells = {};
     const { lo, hi } = PT.lead2; const rootMidi = 60 + rootPC;
     for (let s = 0; s < steps; s++) {
       const d = chordAt(s);
       const triad = [d, d + 2, d + 4];
-      const note = fitRange(degToMidi(rootMidi, scale, triad[s % 3]), lo, hi);
-      p.lead2.cells[`${note}:${s}`] = true;
+      p.lead2.cells[`${fitRange(degToMidi(rootMidi, scaleArr, triad[s % 3]), lo, hi)}:${s}`] = true;
     }
   }
+}
 
-  saveState();
-  syncTransportUI();
-  renderTracks();
-  renderSong();
-  const scaleLabel = opts.scale === 'major' ? 'majeur' : opts.scale === 'minor' ? 'mineur' : 'penta';
-  return `${ROOT_NAMES[rootPC]} ${scaleLabel}`;
+function buildCtx(scale, density, tracks, rootPC) {
+  const steps = state.steps;
+  return {
+    scaleArr: SCALES[scale] || SCALES.minor,
+    rootPC,
+    prog: rand(PROGS[scale] || PROGS.minor),
+    steps,
+    spb: Math.max(1, Math.floor(steps / 4)),
+    numChords: steps >= 16 ? 4 : steps >= 8 ? 2 : 1,
+    segLen: steps / (steps >= 16 ? 4 : steps >= 8 ? 2 : 1),
+    density,
+    tracks,
+  };
+}
+
+// Single pattern into the current edit slot.
+function generate(opts) {
+  const rootPC = opts.root == null ? Math.floor(Math.random() * 12) : opts.root;
+  fillPattern(editP(), buildCtx(opts.scale, opts.density, opts.tracks, rootPC));
+  saveState(); syncTransportUI(); renderTracks(); renderSong();
+  return keyLabel(rootPC, opts.scale);
+}
+
+// Whole song: several section patterns (shared key) + an arranged chain.
+function generateSong(opts) {
+  const form = SONG_FORMS[opts.form];
+  const rootPC = opts.root == null ? Math.floor(Math.random() * 12) : opts.root;
+  const patterns = [];
+  for (const sec of form.sections) {
+    const p = emptyPattern(state.steps);
+    const tracks = {};
+    for (const id of ['drum', 'bass', 'lead', 'lead2']) tracks[id] = !!sec.tracks[id] && !!opts.tracks[id];
+    fillPattern(p, buildCtx(opts.scale, sec.density, tracks, rootPC));
+    patterns.push(p);
+  }
+  state.patterns = patterns;
+  state.editPattern = 0;
+  state.chain = form.chain.filter(i => i < patterns.length);
+  if (!state.chain.length) state.chain = [0];
+  saveState(); syncTransportUI(); renderTracks(); renderSong();
+  return keyLabel(rootPC, opts.scale);
 }
 
 function genPillGroup(label, options, get, set) {
@@ -661,6 +712,10 @@ function openGenerateModal() {
 
   const body = document.createElement('div');
   body.className = 'gen-body';
+
+  body.appendChild(genPillGroup('Structure',
+    [['single', '1 motif'], ['verseChorus', 'Couplet/Refrain'], ['full', 'Morceau complet']],
+    () => genOpts.form, v => genOpts.form = v));
 
   body.appendChild(genPillGroup('Gamme',
     [['major', 'Majeur'], ['minor', 'Mineur'], ['penta', 'Penta']],
@@ -709,11 +764,20 @@ function openGenerateModal() {
   gen.textContent = '✨ Générer';
   gen.addEventListener('click', () => {
     if (!Object.values(genOpts.tracks).some(Boolean)) { alert('Sélectionne au moins une piste'); return; }
-    const key = generate(genOpts);
+    let key;
+    if (genOpts.form === 'single') {
+      key = generate(genOpts);
+    } else {
+      if (!confirm('Générer un morceau complet ? Cela remplace tous les motifs et la chaîne actuels.')) return;
+      key = generateSong(genOpts);
+    }
     toast('Généré en ' + key);
   });
   foot.appendChild(gen);
   modal.appendChild(foot);
+
+  // The "Pistes" row is an allow-list; in song mode the structure also decides
+  // which instruments appear per section.
 
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
