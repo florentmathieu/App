@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - main
-      - claude/chiptune-composer-mvp-y6e13q
   workflow_dispatch:
 
 # Allow the workflow to publish to Pages.
@@ -32,6 +31,9 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          # Enable GitHub Pages automatically (no manual repo setting needed).
+          enablement: true
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3

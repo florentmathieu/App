@@ -37,10 +37,46 @@ visuellement sur une grille de pas :
 
 ### Accords
 
-Dans Bass ou Lead, choisis le pinceau **Majeur** ou **Mineur** : un appui sur
-une case pose l'accord complet (les notes hors de la plage visible sont
-ignorées). Repose la fondamentale pour effacer l'accord. Mode **Note** =
+Dans Bass, Lead ou Lead 2, choisis le pinceau **Majeur** ou **Mineur** : un
+appui sur une case pose l'accord complet (les notes hors de la plage visible
+sont ignorées). Repose la fondamentale pour effacer l'accord. Mode **Note** =
 saisie note par note (polyphonie libre possible).
+
+### Volume par piste
+
+Chaque piste a un **curseur de volume** (visible quand elle est dépliée),
+appliqué en temps réel et pris en compte dans l'export.
+
+### Instruments
+
+- **Drum** : Kick · Snare · Hi-hat · Open hat · Clap · Tom (6 percussions)
+- **Bass** (graves, triangle par défaut)
+- **Lead** (médium-aigu, carré par défaut)
+- **Lead 2** (aigu, dent de scie par défaut)
+
+### Export audio
+
+Bouton **⬇ MP3** ou **⬇ WAV** dans le bloc Export : le morceau entier
+(toute la chaîne) est rendu hors-ligne via `OfflineAudioContext`, puis :
+
+- **WAV** : encodage natif 16-bit (lossless)
+- **MP3** : encodé en 160 kbps via [lamejs](https://github.com/zhuker/lamejs)
+  (librairie embarquée dans `js/lame.min.js`)
+
+> Sur iPhone, selon la version d'iOS, le fichier peut s'ouvrir dans un lecteur
+> plutôt que se télécharger directement — utilise alors le bouton Partager
+> pour l'enregistrer dans Fichiers.
+
+### Sauvegarder / recharger des morceaux
+
+- **💾** : sauvegarde le morceau courant (sous un nom) dans la bibliothèque
+  (localStorage du navigateur)
+- **📂** : ouvre la bibliothèque — **Charger**, **Supprimer**, ou
+  **exporter/importer** un morceau en fichier `.json` (pratique pour le
+  sauvegarder ailleurs ou le transférer)
+- **＋** : nouveau morceau vierge
+- Le morceau en cours est aussi **auto-sauvegardé** : il revient tel quel au
+  rechargement de la page.
 
 ## Lancer en local
 
