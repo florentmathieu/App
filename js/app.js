@@ -527,6 +527,7 @@ const SCALES = {
   lydian: [0, 2, 4, 6, 7, 9, 11],   // bright / dreamy
   wholetone: [0, 2, 4, 6, 8, 10],   // floating / space
   harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
+  pentaMajor: [0, 2, 4, 7, 9],      // bright / folk / western
 };
 // Chord progressions as scale-degree indices (valid for each scale's length).
 const PROGS = {
@@ -539,11 +540,12 @@ const PROGS = {
   lydian: [[0, 4, 1, 0], [0, 1, 4, 4], [0, 3, 4, 0]],
   wholetone: [[0, 2, 4, 0], [0, 4, 2, 4], [0, 3, 5, 0]],
   harmonicMinor: [[0, 3, 4, 4], [0, 5, 4, 0], [0, 3, 6, 4]],
+  pentaMajor: [[0, 3, 4, 0], [0, 4, 2, 3], [0, 2, 4, 0]],
 };
 const SCALE_LABELS = {
   major: 'majeur', minor: 'mineur', penta: 'penta', hirajoshi: 'hirajoshi',
   dorian: 'dorien', phrygian: 'phrygien', lydian: 'lydien',
-  wholetone: 'tons entiers', harmonicMinor: 'min. harmonique',
+  wholetone: 'tons entiers', harmonicMinor: 'min. harmonique', pentaMajor: 'penta majeur',
 };
 
 // Style presets: scale + tempo + density + per-track waveform/duty.
@@ -554,6 +556,10 @@ const STYLES = {
   spatial:   { label: 'Spatial',   scale: 'wholetone', bpm: 84,  density: 'sparse', waves: { bass: { type: 'sawtooth' }, lead: { type: 'sawtooth' }, lead2: { type: 'triangle' } } },
   heroique:  { label: 'Héroïque',  scale: 'major',     bpm: 140, density: 'dense',  waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.25 }, lead2: { type: 'square', duty: 0.25 } } },
   donjon:    { label: 'Donjon',    scale: 'phrygian',  bpm: 92,  density: 'normal', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.125 }, lead2: { type: 'triangle' } } },
+  lofi:      { label: 'Lo-fi',     scale: 'dorian',    bpm: 75,  density: 'sparse', waves: { bass: { type: 'triangle' }, lead: { type: 'triangle' }, lead2: { type: 'triangle' } } },
+  dance:     { label: 'Dance',     scale: 'minor',     bpm: 128, density: 'dense',  waves: { bass: { type: 'sawtooth' }, lead: { type: 'square', duty: 0.25 }, lead2: { type: 'square', duty: 0.5 } } },
+  western:   { label: 'Western',   scale: 'pentaMajor', bpm: 104, density: 'normal', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.5 }, lead2: { type: 'triangle' } } },
+  horreur:   { label: 'Horreur',   scale: 'harmonicMinor', bpm: 66, density: 'sparse', waves: { bass: { type: 'triangle' }, lead: { type: 'square', duty: 0.125 }, lead2: { type: 'sawtooth' } } },
 };
 
 const ROOT_NAMES = ['Do', 'Do#', 'Ré', 'Ré#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
@@ -715,6 +721,16 @@ function generateSong(opts) {
     const p = emptyPattern(state.steps);
     const tracks = {};
     for (const id of ['drum', 'bass', 'lead', 'lead2']) tracks[id] = !!sec.tracks[id] && !!opts.tracks[id];
+    // No drums selected? Bring the melody in from the very start (otherwise a
+    // drum-focused intro would be nearly empty).
+    if (!opts.tracks.drum) {
+      if (opts.tracks.bass) tracks.bass = true;
+      if (opts.tracks.lead) tracks.lead = true;
+    }
+    // Never leave a section silent: fall back to any enabled melodic track.
+    if (!tracks.drum && !tracks.bass && !tracks.lead && !tracks.lead2) {
+      for (const id of ['bass', 'lead', 'lead2']) if (opts.tracks[id]) tracks[id] = true;
+    }
     fillPattern(p, buildCtx(opts.scale, sec.density, tracks, rootPC));
     patterns.push(p);
   }
