@@ -152,6 +152,7 @@ select {
   font-size: 12px; cursor: pointer;
 }
 .pill.on { background: color-mix(in srgb, var(--accent) 30%, var(--panel2)); border-color: var(--accent); color: #fff; }
+.pill.dim { opacity: .45; }
 
 /* ---------- Song panel (patterns + chain) ---------- */
 .song {

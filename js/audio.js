@@ -25,6 +25,25 @@ function makeNoiseBuffer(ctx, seconds = 1.0) {
   return buf;
 }
 
+// Build (and cache per context) a PeriodicWave for a pulse wave of the given
+// duty cycle — this is what gives the classic NES square-channel timbres
+// (12.5% / 25% / 75% sound noticeably different from a plain 50% square).
+function pulseWave(ctx, duty) {
+  ctx._pulseCache = ctx._pulseCache || {};
+  const key = duty.toFixed(3);
+  if (ctx._pulseCache[key]) return ctx._pulseCache[key];
+  const N = 32;
+  const real = new Float32Array(N);
+  const imag = new Float32Array(N);
+  for (let n = 1; n < N; n++) {
+    real[n] = 2 * Math.sin(2 * Math.PI * n * duty) / (Math.PI * n);
+    imag[n] = 2 * (1 - Math.cos(2 * Math.PI * n * duty)) / (Math.PI * n);
+  }
+  const w = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+  ctx._pulseCache[key] = w;
+  return w;
+}
+
 export class ChiptuneEngine {
   constructor() {
     this.ctx = null;
@@ -160,7 +179,7 @@ export class ChiptuneEngine {
   _scheduleStep(step, time, pattern = 0) {
     if (!this.stepProvider) return;
     for (const v of this.stepProvider(step, pattern)) {
-      this._render(this.ctx, this.master, this.noiseBuffer, v, time);
+      this._render(this.ctx, this.master, this.noiseBuffer, v, time + (v.offset || 0));
     }
   }
 
@@ -178,7 +197,7 @@ export class ChiptuneEngine {
       case 'openhat': return this._openhat(ctx, dest, noise, time, v.gain);
       case 'clap':    return this._clap(ctx, dest, noise, time, v.gain);
       case 'tom':     return this._tom(ctx, dest, time, v.gain);
-      case 'tone':    return this._tone(ctx, dest, time, v.freq, v.dur, v.gain, v.type);
+      case 'tone':    return this._tone(ctx, dest, time, v.freq, v.dur, v.gain, v.type, v.duty);
     }
   }
 
@@ -260,10 +279,14 @@ export class ChiptuneEngine {
     osc.start(time); osc.stop(time + 0.3);
   }
 
-  // --- Pitched voice (bass / lead / arp) ---
-  _tone(ctx, dest, time, freq, dur, gain = 0.5, type = 'square') {
+  // --- Pitched voice (bass / lead / lead2) ---
+  _tone(ctx, dest, time, freq, dur, gain = 0.5, type = 'square', duty = 0.5) {
     const osc = ctx.createOscillator(), g = ctx.createGain();
-    osc.type = type;
+    if (type === 'square' && Math.abs(duty - 0.5) > 1e-3) {
+      osc.setPeriodicWave(pulseWave(ctx, duty));
+    } else {
+      osc.type = type;
+    }
     osc.frequency.setValueAtTime(freq, time);
     const a = 0.005, r = Math.min(0.06, dur * 0.5);
     g.gain.setValueAtTime(0.0001, time);
@@ -297,7 +320,7 @@ export class ChiptuneEngine {
       const pattern = this.chain[c];
       for (let step = 0; step < this.steps; step++) {
         for (const v of this.stepProvider(step, pattern)) {
-          this._render(octx, master, noise, v, t);
+          this._render(octx, master, noise, v, t + (v.offset || 0));
         }
         t += secPerStep;
       }
