@@ -54,6 +54,21 @@ appliqué en temps réel et pris en compte dans l'export.
 - **Lead** (médium-aigu, carré par défaut)
 - **Lead 2** (aigu, dent de scie par défaut)
 
+### Duty cycle (largeur d'impulsion)
+
+Sur les pistes mélodiques, avec l'onde **Carré**, choisis le **Pulse** :
+**12% / 25% / 50% / 75%**. Chaque largeur a un timbre différent, façon canaux
+square de la NES (le 50% est l'onde carrée classique). Implémenté via
+`PeriodicWave` (séries de Fourier du signal pulse).
+
+### Arpégiateur
+
+Bouton **Arpège** par piste mélodique : **Off / ↑ / ↓ / ↕**, avec une
+**Vitesse** (×2 / ×3 / ×4 notes par pas). Quand il est actif, les notes posées
+sur un même pas (par ex. un accord stampé) sont jouées en séquence rapide à
+l'intérieur du pas — l'effet « arpège chiptune » classique. Combine-le avec le
+pinceau Majeur/Mineur pour des arpèges instantanés.
+
 ### Export audio
 
 Bouton **⬇ MP3** ou **⬇ WAV** dans le bloc Export : le morceau entier

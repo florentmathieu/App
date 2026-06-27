@@ -58,7 +58,8 @@ function normalizeState(s) {
   s.meta.drum = Object.assign({ expanded: true, muted: false, volume: 0.9 }, s.meta.drum || {});
   for (const t of PITCHED_TRACKS) {
     s.meta[t.id] = Object.assign(
-      { expanded: false, muted: false, type: t.defType, chord: 'off', volume: t.vol },
+      { expanded: false, muted: false, type: t.defType, chord: 'off', volume: t.vol,
+        duty: 0.5, arp: 'off', arpRate: 4 },
       s.meta[t.id] || {}
     );
   }
@@ -182,15 +183,41 @@ engine.stepProvider = (step, patternIndex) => {
     if (m.muted) continue;
     const g = t.base * m.volume;
     const cells = p[t.id].cells;
+    const notes = [];
     for (const key of Object.keys(cells)) {
+      if (!cells[key]) continue;
       const [midi, s] = key.split(':').map(Number);
-      if (s === step && cells[key]) {
-        voices.push({ kind: 'tone', freq: midiToFreq(midi), dur, gain: g, type: m.type });
+      if (s === step) notes.push(midi);
+    }
+    if (!notes.length) continue;
+
+    if (m.arp && m.arp !== 'off') {
+      notes.sort((a, b) => a - b);
+      const order = arpOrder(notes, m.arp);
+      const div = Math.max(2, m.arpRate || 4);
+      const sub = secPerStep / div;
+      for (let i = 0; i < div; i++) {
+        const midi = order[i % order.length];
+        voices.push({ kind: 'tone', freq: midiToFreq(midi), dur: sub * 0.9, gain: g, type: m.type, duty: m.duty, offset: i * sub });
+      }
+    } else {
+      for (const midi of notes) {
+        voices.push({ kind: 'tone', freq: midiToFreq(midi), dur, gain: g, type: m.type, duty: m.duty });
       }
     }
   }
   return voices;
 };
+
+function arpOrder(notes, mode) {
+  if (mode === 'down') return notes.slice().reverse();
+  if (mode === 'updown') {
+    const up = notes.slice();
+    const down = notes.slice().reverse().slice(1, -1); // avoid repeating the endpoints
+    return down.length ? up.concat(down) : up;
+  }
+  return notes.slice(); // up
+}
 
 function previewDur() { return 60.0 / state.bpm / (state.steps / 4) * 0.9; }
 
@@ -572,6 +599,47 @@ function renderPitchTrack(t) {
     tools.appendChild(b);
   }
   body.appendChild(tools);
+
+  // Duty cycle (pulse width) — affects the square wave.
+  const duties = [[0.125, '12%'], [0.25, '25%'], [0.5, '50%'], [0.75, '75%']];
+  const dutyRow = document.createElement('div');
+  dutyRow.className = 'track-tools';
+  dutyRow.innerHTML = `<span class="tools-label" title="Largeur d'impulsion (onde carrée)">Pulse</span>`;
+  for (const [val, lbl] of duties) {
+    const b = document.createElement('button');
+    b.className = 'pill' + (Math.abs(m.duty - val) < 1e-3 ? ' on' : '') + (m.type !== 'square' ? ' dim' : '');
+    b.textContent = lbl;
+    b.title = m.type !== 'square' ? 'Actif avec l\'onde Carré' : `Duty ${lbl}`;
+    b.addEventListener('click', () => { m.duty = val; saveState(); renderTracks(); });
+    dutyRow.appendChild(b);
+  }
+  body.appendChild(dutyRow);
+
+  // Arpeggiator
+  const arpRow = document.createElement('div');
+  arpRow.className = 'track-tools';
+  arpRow.innerHTML = `<span class="tools-label">Arpège</span>`;
+  for (const [mode, lbl] of [['off', 'Off'], ['up', '↑'], ['down', '↓'], ['updown', '↕']]) {
+    const b = document.createElement('button');
+    b.className = 'pill' + (m.arp === mode ? ' on' : '');
+    b.textContent = lbl;
+    b.addEventListener('click', () => { m.arp = mode; saveState(); renderTracks(); });
+    arpRow.appendChild(b);
+  }
+  if (m.arp !== 'off') {
+    const sep = document.createElement('span');
+    sep.className = 'tools-label sep'; sep.textContent = 'Vitesse';
+    arpRow.appendChild(sep);
+    for (const r of [2, 3, 4]) {
+      const b = document.createElement('button');
+      b.className = 'pill' + (m.arpRate === r ? ' on' : '');
+      b.textContent = '×' + r;
+      b.addEventListener('click', () => { m.arpRate = r; saveState(); renderTracks(); });
+      arpRow.appendChild(b);
+    }
+  }
+  body.appendChild(arpRow);
+
   body.appendChild(volumeControl(t.id));
 
   const grid = document.createElement('div');
@@ -614,7 +682,7 @@ function togglePitch(t, rootMidi, step) {
     if (cells[key]) delete cells[key];
     else {
       cells[key] = true;
-      engine.preview({ kind: 'tone', freq: midiToFreq(rootMidi), dur: previewDur(), gain: g, type: m.type });
+      engine.preview({ kind: 'tone', freq: midiToFreq(rootMidi), dur: previewDur(), gain: g, type: m.type, duty: m.duty });
     }
   } else {
     const notes = shape.map(o => rootMidi + o).filter(n => n >= t.lo && n <= t.hi);
@@ -623,7 +691,7 @@ function togglePitch(t, rootMidi, step) {
       for (const n of notes) delete cells[`${n}:${step}`];
     } else {
       for (const n of notes) cells[`${n}:${step}`] = true;
-      for (const n of notes) engine.preview({ kind: 'tone', freq: midiToFreq(n), dur: previewDur(), gain: g * 0.8, type: m.type });
+      for (const n of notes) engine.preview({ kind: 'tone', freq: midiToFreq(n), dur: previewDur(), gain: g * 0.8, type: m.type, duty: m.duty });
     }
   }
   saveState();
