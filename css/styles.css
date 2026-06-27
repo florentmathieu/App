@@ -265,6 +265,11 @@ input[type="range"].vol { flex: 1 1 auto; max-width: 220px; }
 }
 .track[data-track] .cell.active { background: var(--accent); }
 
+.cell.writehead {
+  outline: 2px solid #ffd166;
+  outline-offset: -2px;
+}
+
 .cell.playhead::after {
   content: "";
   position: absolute; inset: 0;

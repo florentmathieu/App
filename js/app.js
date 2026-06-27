@@ -253,6 +253,7 @@ function renderLibraryBar() {
   const tools = document.createElement('div');
   tools.className = 'song-tools';
   tools.appendChild(iconBtn('✨', 'Génération auto', openGenerateModal));
+  tools.appendChild(iconBtn('🎹', 'Clavier MIDI', openMidiModal));
   tools.appendChild(iconBtn('💾', 'Sauvegarder', () => {
     const n = prompt('Nom du morceau :', state.name);
     if (n && saveSong(n)) { renderSong(); toast(`« ${state.name} » sauvegardé`); }
@@ -784,6 +785,154 @@ function openGenerateModal() {
 }
 
 // ============================================================================
+// Live MIDI keyboard input (Web MIDI API — not supported on iOS Safari)
+// ============================================================================
+let midiAccess = null;
+let midiEnabled = false;
+let midiTarget = 'lead';
+let midiArmed = false;
+let writeStep = 0;
+let midiChordTimer = null;
+let midiStatusEl = null;
+
+function midiSupported() { return typeof navigator !== 'undefined' && !!navigator.requestMIDIAccess; }
+
+async function enableMidi() {
+  if (!midiSupported()) return;
+  engine.resume();
+  try {
+    midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    midiEnabled = true;
+    bindMidiInputs();
+    midiAccess.onstatechange = bindMidiInputs;
+  } catch (e) {
+    midiEnabled = false;
+    if (midiStatusEl) midiStatusEl.textContent = 'Accès MIDI refusé : ' + (e.message || e);
+  }
+  updateMidiStatus();
+}
+
+function bindMidiInputs() {
+  if (!midiAccess) return;
+  for (const input of midiAccess.inputs.values()) input.onmidimessage = onMidiMessage;
+  updateMidiStatus();
+}
+
+function midiDeviceNames() {
+  if (!midiAccess) return [];
+  return [...midiAccess.inputs.values()].map(i => i.name || 'MIDI');
+}
+
+function updateMidiStatus() {
+  if (!midiStatusEl) return;
+  if (!midiSupported()) { midiStatusEl.textContent = '⚠️ Web MIDI non supporté par ce navigateur (ex. Safari iPhone).'; return; }
+  if (!midiEnabled) { midiStatusEl.textContent = 'MIDI non activé.'; return; }
+  const names = midiDeviceNames();
+  midiStatusEl.textContent = names.length ? '🎹 Connecté : ' + names.join(', ') : 'Activé — branche un clavier MIDI.';
+}
+
+function onMidiMessage(ev) {
+  const [status, d1, d2] = ev.data;
+  const cmd = status & 0xf0;
+  if (cmd === 0x90 && d2 > 0) handleMidiNoteOn(d1, d2);
+}
+
+function handleMidiNoteOn(midiNote, velocity) {
+  const t = PT[midiTarget];
+  const m = state.meta[midiTarget];
+  const note = fitRange(midiNote, t.lo, t.hi);
+  const gain = t.base * m.volume * Math.max(0.3, velocity / 127);
+  engine.preview({ kind: 'tone', freq: midiToFreq(note), dur: previewDur(), gain, type: m.type, duty: m.duty });
+
+  if (!midiArmed) return;
+
+  if (engine.isPlaying) {
+    // Real-time overdub: quantize to the current playhead step of the edit pattern.
+    const step = lastStep >= 0 ? lastStep : 0;
+    editP()[midiTarget].cells[`${note}:${step}`] = true;
+    saveState();
+    markRecordedCell(midiTarget, note, step);
+  } else {
+    // Step entry: write at the cursor; chords (near-simultaneous notes) share it.
+    editP()[midiTarget].cells[`${note}:${writeStep}`] = true;
+    saveState();
+    renderTracks();
+    clearTimeout(midiChordTimer);
+    midiChordTimer = setTimeout(() => { writeStep = (writeStep + 1) % state.steps; renderTracks(); }, 140);
+  }
+}
+
+function markRecordedCell(trackId, midi, step) {
+  const cell = tracksEl.querySelector(`[data-track="${trackId}"] .cell[data-step="${step}"][data-midi="${midi}"]`);
+  if (cell) cell.classList.add('active');
+}
+
+function openMidiModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const head = document.createElement('div');
+  head.className = 'modal-head';
+  head.innerHTML = `<h2>🎹 Clavier MIDI</h2>`;
+  const close = document.createElement('button');
+  close.className = 'modal-close'; close.textContent = '✕';
+  close.addEventListener('click', () => overlay.remove());
+  head.appendChild(close);
+  modal.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'gen-body';
+
+  midiStatusEl = document.createElement('p');
+  midiStatusEl.className = 'gen-note';
+  body.appendChild(midiStatusEl);
+  updateMidiStatus();
+
+  if (midiSupported() && !midiEnabled) {
+    const en = document.createElement('button');
+    en.className = 'song-btn wide';
+    en.textContent = 'Activer le MIDI';
+    en.addEventListener('click', async () => { await enableMidi(); openMidiRefresh(); });
+    body.appendChild(en);
+  }
+
+  // Target track
+  body.appendChild(genPillGroup('Cible',
+    [['bass', 'Bass'], ['lead', 'Lead'], ['lead2', 'Lead 2']],
+    () => midiTarget, v => { midiTarget = v; renderTracks(); }));
+
+  // Arm recording
+  const armRow = document.createElement('div');
+  armRow.className = 'track-tools';
+  armRow.innerHTML = `<span class="tools-label">Enregistrer</span>`;
+  const armBtn = document.createElement('button');
+  armBtn.className = 'pill' + (midiArmed ? ' on' : '');
+  armBtn.textContent = midiArmed ? '● Armé' : 'Désarmé';
+  armBtn.addEventListener('click', () => {
+    midiArmed = !midiArmed;
+    armBtn.className = 'pill' + (midiArmed ? ' on' : '');
+    armBtn.textContent = midiArmed ? '● Armé' : 'Désarmé';
+    writeStep = 0;
+    renderTracks();
+  });
+  armRow.appendChild(armBtn);
+  body.appendChild(armRow);
+
+  const note = document.createElement('p');
+  note.className = 'gen-note';
+  note.innerHTML = 'Joue : tu entends la piste cible.<br>Armé + <b>lecture</b> : enregistrement en boucle (quantisé au pas).<br>Armé + <b>à l\'arrêt</b> : saisie pas-à-pas (les accords vont sur le même pas).';
+  body.appendChild(note);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Re-open helper after enabling (refresh the modal contents).
+  function openMidiRefresh() { overlay.remove(); openMidiModal(); }
+}
+
+// ============================================================================
 // Library modal
 // ============================================================================
 function openLibraryModal() {
@@ -1054,8 +1203,10 @@ function renderPitchTrack(t) {
     for (let s = 0; s < state.steps; s++) {
       const key = `${midi}:${s}`;
       const cell = document.createElement('button');
-      cell.className = 'cell' + beatClass(s) + (isSharp(midi) ? ' sharp' : '') + (p[t.id].cells[key] ? ' active' : '');
+      cell.className = 'cell' + beatClass(s) + (isSharp(midi) ? ' sharp' : '') + (p[t.id].cells[key] ? ' active' : '')
+        + (midiArmed && !engine.isPlaying && t.id === midiTarget && s === writeStep ? ' writehead' : '');
       cell.dataset.step = s;
+      cell.dataset.midi = midi;
       cell.addEventListener('click', () => togglePitch(t, midi, s));
       cells.appendChild(cell);
     }

@@ -69,6 +69,21 @@ sur un même pas (par ex. un accord stampé) sont jouées en séquence rapide à
 l'intérieur du pas — l'effet « arpège chiptune » classique. Combine-le avec le
 pinceau Majeur/Mineur pour des arpèges instantanés.
 
+### Clavier MIDI en direct (🎹)
+
+Bouton **🎹** dans la barre Morceau (Web MIDI API). ⚠️ **Non supporté par Safari
+iPhone** (limite d'Apple) — fonctionne sur Chrome (ordi) et Android ; sinon
+l'app affiche « non supporté » et le reste marche normalement.
+
+1. **Activer le MIDI** (autorise l'accès, branche un clavier/contrôleur)
+2. **Cible** : la piste qui reçoit les notes (Bass / Lead / Lead 2)
+3. **Enregistrer** (armer) :
+   - en **lecture** → overdub en boucle, notes quantisées au pas courant ;
+   - à l'**arrêt** → saisie pas-à-pas, le curseur (liseré jaune) avance après
+     chaque note ; les notes jouées ensemble forment un accord sur le même pas.
+
+Désarmé, le clavier sert juste à jouer/écouter l'instrument de la piste cible.
+
 ### Export audio
 
 Bouton **⬇ MP3** ou **⬇ WAV** dans le bloc Export : le morceau entier
