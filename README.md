@@ -77,6 +77,10 @@ Bouton **⬇ MP3** ou **⬇ WAV** dans le bloc Export : le morceau entier
 - **WAV** : encodage natif 16-bit (lossless)
 - **MP3** : encodé en 160 kbps via [lamejs](https://github.com/zhuker/lamejs)
   (librairie embarquée dans `js/lame.min.js`)
+- **MIDI** : Standard MIDI File (format 1) écrit à la main — une piste par
+  instrument, percussions sur le canal 10 (GM), programmes GM par piste.
+  Les **arpèges sont aplatis en vraies notes MIDI**, donc ils sont préservés à
+  l'ouverture dans un DAW / GarageBand.
 
 > Sur iPhone, selon la version d'iOS, le fichier peut s'ouvrir dans un lecteur
 > plutôt que se télécharger directement — utilise alors le bouton Partager

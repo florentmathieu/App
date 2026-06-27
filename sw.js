@@ -1,5 +1,5 @@
 // Simple app-shell cache so PicoTune works offline once loaded.
-const CACHE = 'picotune-v3';
+const CACHE = 'picotune-v4';
 const ASSETS = [
   './',
   './index.html',

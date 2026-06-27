@@ -26,6 +26,10 @@ function notesOf(t) {
   return a;
 }
 
+// General MIDI mapping for export.
+const DRUM_MIDI = { kick: 36, snare: 38, hat: 42, openhat: 46, clap: 39, tom: 45 };
+const MIDI_PROGRAM = { bass: 38, lead: 80, lead2: 81 }; // synth bass, square lead, saw lead
+
 const CHORDS = { off: null, maj: [0, 4, 7], min: [0, 3, 7] };
 const STEP_OPTIONS = [8, 16, 32];
 const STORAGE_KEY = 'chiptune-mvp-v3';
@@ -345,6 +349,7 @@ function renderExportRow() {
   tools.className = 'song-tools';
   tools.appendChild(iconBtn('⬇ MP3', 'Exporter en MP3', (e) => doExport('mp3', e.target), false, 'wide'));
   tools.appendChild(iconBtn('⬇ WAV', 'Exporter en WAV', (e) => doExport('wav', e.target), false, 'wide'));
+  tools.appendChild(iconBtn('⬇ MIDI', 'Exporter en MIDI', exportMidi, false, 'wide'));
   row.appendChild(tools);
   return row;
 }
@@ -385,6 +390,125 @@ function downloadBlob(blob, filename) {
   a.href = url; a.download = filename; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+// ----- MIDI export (Standard MIDI File, format 1) -----
+function exportMidi() {
+  try {
+    downloadBlob(buildMidiBlob(), `${safeName()}.mid`);
+    toast('Export MIDI prêt');
+  } catch (e) {
+    alert('Export MIDI échoué : ' + (e && e.message ? e.message : e));
+  }
+}
+
+function vlq(n) {
+  const bytes = [n & 0x7f];
+  n >>= 7;
+  while (n > 0) { bytes.unshift((n & 0x7f) | 0x80); n >>= 7; }
+  return bytes;
+}
+function clampVel(x) { return Math.max(1, Math.min(127, Math.round(x * 127))); }
+
+function encodeTrack(events) {
+  events = events.slice().sort((a, b) => a.tick - b.tick || a.order - b.order);
+  const out = [];
+  let last = 0;
+  for (const e of events) {
+    out.push(...vlq(e.tick - last), ...e.data);
+    last = e.tick;
+  }
+  out.push(0x00, 0xFF, 0x2F, 0x00); // end of track
+  const len = out.length;
+  return [0x4D, 0x54, 0x72, 0x6B, (len >>> 24) & 255, (len >>> 16) & 255, (len >>> 8) & 255, len & 255, ...out];
+}
+
+function buildMidiBlob() {
+  const PPQ = 480;
+  const ticksPerStep = Math.round(PPQ / (state.steps / 4));
+  const barTicks = state.steps * ticksPerStep;
+  const chunks = [];
+
+  // Track 0: tempo + time signature
+  const tempo = Math.round(60000000 / state.bpm);
+  const meta = [
+    { tick: 0, order: 0, data: [0xFF, 0x51, 0x03, (tempo >> 16) & 255, (tempo >> 8) & 255, tempo & 255] },
+    { tick: 0, order: 1, data: [0xFF, 0x58, 0x04, 4, 2, 24, 8] },
+  ];
+  chunks.push(encodeTrack(meta));
+
+  const nameEvt = (name) => {
+    const b = [...name].map(c => c.charCodeAt(0) & 0x7f);
+    return { tick: 0, order: -2, data: [0xFF, 0x03, b.length, ...b] };
+  };
+
+  // Drum track (GM channel 10 => index 9)
+  {
+    const ev = [nameEvt('Drum')];
+    const dvol = state.meta.drum.volume;
+    for (let cp = 0; cp < state.chain.length; cp++) {
+      const p = state.patterns[state.chain[cp]];
+      const start = cp * barTicks;
+      for (const lane of DRUM_LANES) {
+        const note = DRUM_MIDI[lane.id];
+        const vel = clampVel(lane.gain * dvol);
+        for (let s = 0; s < state.steps; s++) {
+          if (!p.drum[lane.id][s]) continue;
+          const on = start + s * ticksPerStep;
+          ev.push({ tick: on, order: 1, data: [0x99, note, vel] });
+          ev.push({ tick: on + Math.floor(ticksPerStep / 2), order: 0, data: [0x89, note, 0] });
+        }
+      }
+    }
+    chunks.push(encodeTrack(ev));
+  }
+
+  // Melodic tracks
+  PITCHED_TRACKS.forEach((t, i) => {
+    const chan = i % 16 === 9 ? 10 : i; // keep off the drum channel
+    const m = state.meta[t.id];
+    const vel = clampVel(m.volume);
+    const ev = [nameEvt(t.title), { tick: 0, order: -1, data: [0xC0 | chan, MIDI_PROGRAM[t.id] || 80] }];
+    for (let cp = 0; cp < state.chain.length; cp++) {
+      const p = state.patterns[state.chain[cp]];
+      const start = cp * barTicks;
+      const byStep = {};
+      const cells = p[t.id].cells;
+      for (const k of Object.keys(cells)) {
+        if (!cells[k]) continue;
+        const [midi, s] = k.split(':').map(Number);
+        (byStep[s] = byStep[s] || []).push(midi);
+      }
+      for (const s of Object.keys(byStep)) {
+        const stepTick = start + Number(s) * ticksPerStep;
+        let notes = byStep[s];
+        if (m.arp && m.arp !== 'off') {
+          notes.sort((a, b) => a - b);
+          const order = arpOrder(notes, m.arp);
+          const div = Math.max(2, m.arpRate || 4);
+          const sub = ticksPerStep / div;
+          for (let j = 0; j < div; j++) {
+            const note = order[j % order.length];
+            const on = stepTick + Math.floor(j * sub);
+            const off = stepTick + Math.floor((j + 1) * sub);
+            ev.push({ tick: on, order: 1, data: [0x90 | chan, note, vel] });
+            ev.push({ tick: off, order: 0, data: [0x80 | chan, note, 0] });
+          }
+        } else {
+          for (const note of notes) {
+            ev.push({ tick: stepTick, order: 1, data: [0x90 | chan, note, vel] });
+            ev.push({ tick: stepTick + ticksPerStep, order: 0, data: [0x80 | chan, note, 0] });
+          }
+        }
+      }
+    }
+    chunks.push(encodeTrack(ev));
+  });
+
+  const ntrk = chunks.length;
+  const header = [0x4D, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, (ntrk >> 8) & 255, ntrk & 255, (PPQ >> 8) & 255, PPQ & 255];
+  const all = header.concat(...chunks);
+  return new Blob([new Uint8Array(all)], { type: 'audio/midi' });
 }
 
 // ============================================================================
