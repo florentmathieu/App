@@ -86,6 +86,27 @@ Bouton **⬇ MP3** ou **⬇ WAV** dans le bloc Export : le morceau entier
 > plutôt que se télécharger directement — utilise alors le bouton Partager
 > pour l'enregistrer dans Fichiers.
 
+### Génération automatique (✨)
+
+Bouton **✨** dans la barre Morceau : génère des phrases musicales **cohérentes**
+dans le motif courant.
+
+- **Gamme** : Majeur / Mineur / Penta (mineure)
+- **Tonalité** : choisie ou **Aléatoire**
+- **Densité** : Clair / Normal / Dense
+- **Pistes** à remplir : Drum / Bass / Lead / Lead 2
+
+La logique est musicale, pas du bruit aléatoire :
+- une **progression d'accords diatonique** est tirée dans la gamme/tonalité ;
+- la **basse** suit les fondamentales (et la quinte selon la densité) ;
+- le **lead** est une mélodie calée sur la gamme, biaisée vers les notes
+  d'accord sur les temps forts (marche aléatoire contrainte entre) ;
+- **Lead 2** déroule un **arpège** de l'accord en cours ;
+- la **batterie** pose kick/snare/hats sur une grille rythmique cohérente.
+
+Relance pour obtenir des variations. Ça remplit le motif courant — tu peux
+ensuite retoucher à la main, dupliquer le motif, l'enchaîner, exporter, etc.
+
 ### Sauvegarder / recharger des morceaux
 
 - **💾** : sauvegarde le morceau courant (sous un nom) dans la bibliothèque

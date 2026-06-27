@@ -320,6 +320,15 @@ input[type="range"].vol { flex: 1 1 auto; max-width: 220px; }
 .modal-foot { padding: 12px 14px; border-top: 1px solid var(--line); }
 .modal-foot .song-btn { width: 100%; text-align: center; }
 
+/* ---------- Generate modal ---------- */
+.gen-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.gen-sel {
+  background: var(--bg2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 9px;
+  padding: 7px 10px; font-size: 14px;
+}
+.gen-note { color: var(--muted); font-size: 12px; margin: 6px 2px 0; }
+
 /* ---------- Toast ---------- */
 #toast {
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
