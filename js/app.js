@@ -735,7 +735,16 @@ function generateSong(opts) {
     patterns.push(p);
   }
   state.patterns = patterns;
-  state.editPattern = 0;
+  // Show the richest section (e.g. the refrain) so what you see matches what
+  // you hear — the intro can be empty of lead/arp.
+  let best = 0, bestScore = -1;
+  patterns.forEach((p, idx) => {
+    let sc = 0;
+    for (const l of DRUM_LANES) sc += (p.drum[l.id] || []).filter(Boolean).length;
+    for (const t of PITCHED_TRACKS) sc += Object.values(p[t.id].cells).filter(Boolean).length;
+    if (sc > bestScore) { bestScore = sc; best = idx; }
+  });
+  state.editPattern = best;
   state.chain = form.chain.filter(i => i < patterns.length);
   if (!state.chain.length) state.chain = [0];
   saveState(); syncTransportUI(); renderTracks(); renderSong();
