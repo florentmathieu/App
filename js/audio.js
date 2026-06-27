@@ -67,8 +67,8 @@ export class ChiptuneEngine {
     this.stepProvider = null; // (step, patternIndex) => [voice]
     this._queue = [];
     this.onStepDraw = null;
-    this.onPatternDraw = null;
-    this._lastPatternDrawn = -1;
+    this.onPatternDraw = null; // (patternIndex, chainPos)
+    this._lastPosDrawn = -1;
   }
 
   setChain(arr) {
@@ -137,9 +137,9 @@ export class ChiptuneEngine {
     this._queue = [];
     this.currentStep = 0;
     this.chainPos = 0;
-    this._lastPatternDrawn = -1;
+    this._lastPosDrawn = -1;
     if (this.onStepDraw) this.onStepDraw(-1);
-    if (this.onPatternDraw) this.onPatternDraw(-1);
+    if (this.onPatternDraw) this.onPatternDraw(-1, -1);
   }
 
   _secondsPerStep() {
@@ -152,7 +152,7 @@ export class ChiptuneEngine {
     while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadTime) {
       const pattern = this.chain[this.chainPos] ?? 0;
       this._scheduleStep(this.currentStep, this.nextNoteTime, pattern);
-      this._queue.push({ step: this.currentStep, time: this.nextNoteTime, pattern });
+      this._queue.push({ step: this.currentStep, time: this.nextNoteTime, pattern, pos: this.chainPos });
       this.nextNoteTime += this._secondsPerStep();
       this.currentStep = (this.currentStep + 1) % this.steps;
       if (this.currentStep === 0) this.chainPos = (this.chainPos + 1) % this.chain.length;
@@ -163,15 +163,15 @@ export class ChiptuneEngine {
   _draw() {
     if (!this.isPlaying) return;
     const now = this.ctx.currentTime;
-    let active = -1, pattern = -1;
+    let active = -1, pattern = -1, pos = -1;
     while (this._queue.length && this._queue[0].time <= now) {
       const item = this._queue.shift();
-      active = item.step; pattern = item.pattern;
+      active = item.step; pattern = item.pattern; pos = item.pos;
     }
     if (active !== -1 && this.onStepDraw) this.onStepDraw(active);
-    if (pattern !== -1 && pattern !== this._lastPatternDrawn && this.onPatternDraw) {
-      this.onPatternDraw(pattern);
-      this._lastPatternDrawn = pattern;
+    if (pos !== -1 && pos !== this._lastPosDrawn && this.onPatternDraw) {
+      this.onPatternDraw(pattern, pos);
+      this._lastPosDrawn = pos;
     }
     requestAnimationFrame(() => this._draw());
   }

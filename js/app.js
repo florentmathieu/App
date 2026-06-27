@@ -42,6 +42,7 @@ const LIBRARY_KEY = 'chiptune-songs-v1';
 const engine = new ChiptuneEngine();
 let state = normalizeState(loadAutosave() || {});
 let playingPattern = -1;
+let playingPos = -1;
 
 function emptyPattern(steps) {
   const drum = {};
@@ -319,7 +320,7 @@ function renderChainRow() {
   chips.className = 'chips chain';
   state.chain.forEach((patIdx, pos) => {
     const chip = document.createElement('button');
-    chip.className = 'chip slot' + (patIdx === playingPattern ? ' playing' : '');
+    chip.className = 'chip slot' + (pos === playingPos ? ' playing' : '');
     chip.textContent = patternLetter(patIdx);
     chip.title = 'Retirer de la chaîne';
     chip.addEventListener('click', () => {
@@ -1326,7 +1327,7 @@ engine.onStepDraw = (step) => {
   if (step >= 0) tracksEl.querySelectorAll(`.cells .cell[data-step="${step}"]`).forEach(c => c.classList.add('playhead'));
   lastStep = step;
 };
-engine.onPatternDraw = (idx) => { playingPattern = idx; renderSong(); };
+engine.onPatternDraw = (idx, pos) => { playingPattern = idx; playingPos = pos == null ? -1 : pos; renderSong(); };
 
 // ============================================================================
 // Transport
