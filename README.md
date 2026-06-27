@@ -113,11 +113,16 @@ dans le motif courant.
 
 **Styles** (ambiances prédéfinies) : touche un style et ça pré-règle la gamme,
 le tempo, les formes d'onde (duty) et la densité — pour une couleur immédiate :
-- **Standard** (mineur), **Asiatique** (gamme japonaise *hirajoshi*),
-  **Médiéval** (*dorien*), **Spatial** (*tons entiers*, dents de scie, lent),
-  **Héroïque** (majeur, rapide, dense), **Donjon** (*phrygien*, sombre).
+- **Standard** (mineur), **Asiatique** (*hirajoshi*), **Médiéval** (*dorien*),
+  **Spatial** (*tons entiers*, lent), **Héroïque** (majeur, rapide, dense),
+  **Donjon** (*phrygien*, sombre), **Lo-fi** (*dorien*, lent, doux),
+  **Dance** (mineur, 128 bpm, dense), **Western** (*penta majeur*),
+  **Horreur** (*mineur harmonique*, très lent).
 
 Les sélecteurs Gamme / Densité restent modifiables ensuite pour affiner.
+
+> Si la batterie n'est pas cochée, la basse et le lead entrent **dès le premier
+> pas** (l'intro épurée ne reste pas silencieuse).
 
 **Structure** :
 - **1 motif** : remplit le motif courant.
