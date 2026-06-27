@@ -1,0 +1,44 @@
+name: Deploy PicoTune to GitHub Pages
+
+# Deploys the static site (repo root) to GitHub Pages on every push.
+# Requires: Settings → Pages → Source = "GitHub Actions".
+on:
+  push:
+    branches:
+      - main
+      - claude/chiptune-composer-mvp-y6e13q
+  workflow_dispatch:
+
+# Allow the workflow to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One concurrent deployment; newer pushes cancel in-flight runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # The whole repo is the static site; index.html is at the root.
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
