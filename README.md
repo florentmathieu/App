@@ -17,10 +17,30 @@ visuellement sur une grille de pas :
 
 - **BPM réglable** (40–240) via le curseur
 - **Résolution réglable** : 8 / 16 / 32 pas par mesure
+- **Motifs (patterns)** : crée plusieurs motifs A, B, C… (nouveau / dupliquer / supprimer)
+- **Chaîne (song mode)** : enchaîne les motifs (ex. `A A B C`) joués en boucle ;
+  le motif en cours de lecture est surligné
+- **Accords** : pinceau Majeur / Mineur — un seul appui pose tout l'accord
+  (fondamentale + tierce + quinte), ou plusieurs notes libres sur un même pas
 - **Lecture en boucle** avec tête de lecture (playhead) animée
 - **Mute** par piste, choix de la **forme d'onde** pour bass & lead
 - **Sauvegarde automatique** (localStorage) — ta compo est conservée
 - **Fonctionne hors-ligne** une fois chargée (service worker)
+
+### Composer avec les motifs et la chaîne
+
+1. Le bloc **Motifs** liste tes motifs (A, B, …). Touche une lettre pour
+   l'**éditer** ; `＋` en crée un nouveau, `⧉` duplique, `🗑` supprime.
+2. Le bloc **Chaîne** définit l'ordre de lecture. `＋ A` ajoute le motif
+   en cours d'édition à la fin de la chaîne ; touche un maillon pour le retirer.
+3. ▶ joue la chaîne en boucle. Tu peux éditer un motif pendant la lecture.
+
+### Accords
+
+Dans Bass ou Lead, choisis le pinceau **Majeur** ou **Mineur** : un appui sur
+une case pose l'accord complet (les notes hors de la plage visible sont
+ignorées). Repose la fondamentale pour effacer l'accord. Mode **Note** =
+saisie note par note (polyphonie libre possible).
 
 ## Lancer en local
 

@@ -145,12 +145,58 @@ select {
 
 .track-tools { display: flex; align-items: center; gap: 6px; padding: 10px 0; flex-wrap: wrap; }
 .tools-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; }
-.wave {
+.tools-label.sep { margin-left: 8px; }
+.pill {
   border: 1px solid var(--line); background: var(--panel2);
   color: var(--muted); border-radius: 8px; padding: 6px 9px;
   font-size: 12px; cursor: pointer;
 }
-.wave.on { background: color-mix(in srgb, var(--accent) 30%, var(--panel2)); border-color: var(--accent); color: #fff; }
+.pill.on { background: color-mix(in srgb, var(--accent) 30%, var(--panel2)); border-color: var(--accent); color: #fff; }
+
+/* ---------- Song panel (patterns + chain) ---------- */
+.song {
+  margin: 12px 12px 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.song-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.song-label {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .6px;
+  flex: 0 0 50px;
+}
+.chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.chip {
+  min-width: 34px; height: 34px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  border-radius: 9px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  padding: 0 8px;
+}
+.chip.editing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 28%, var(--panel2)); }
+.chip.playing { box-shadow: 0 0 0 2px #2ec16e inset; }
+.chip.slot { background: var(--bg2); color: var(--muted); font-weight: 700; }
+.chip.slot.playing { color: #fff; box-shadow: 0 0 0 2px #2ec16e inset; }
+
+.song-tools { display: flex; gap: 6px; }
+.song-btn {
+  height: 34px; min-width: 34px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  border-radius: 9px;
+  font-size: 14px; cursor: pointer;
+  padding: 0 9px;
+}
+.song-btn.wide { font-weight: 600; }
+.song-btn:disabled { opacity: .35; cursor: default; }
+.song-btn:active:not(:disabled) { background: var(--line); }
 
 /* ---------- Grid ---------- */
 .grid { display: flex; flex-direction: column; gap: 5px; }
