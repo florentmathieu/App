@@ -358,3 +358,14 @@ input[type="range"].vol { flex: 1 1 auto; max-width: 220px; }
 /* Use the per-track accent for dots/active cells */
 .track { --accent: #6c7bff; }
 .track .dot { background: var(--accent); }
+
+/* ---------- Desktop: keep cells as small squares (don't stretch full width) --- */
+@media (min-width: 680px) {
+  .cells {
+    grid-template-columns: repeat(var(--steps), 34px);
+    flex: 0 0 auto;          /* don't stretch across the panel */
+    justify-content: start;
+  }
+  .grid-row { justify-content: flex-start; }
+  .piano-grid { max-height: 60vh; }
+}
