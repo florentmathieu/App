@@ -1471,6 +1471,16 @@ function firstGestureUnlock() {
 document.addEventListener('touchend', firstGestureUnlock, { once: true });
 document.addEventListener('pointerdown', firstGestureUnlock, { once: true });
 
+// Spacebar toggles playback (ignored while typing in a field).
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  const t = e.target;
+  const tag = t && t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+  e.preventDefault();
+  playBtn.click();
+});
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
