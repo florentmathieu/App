@@ -141,6 +141,12 @@ La logique est musicale, pas du bruit aléatoire :
 - **Lead 2** déroule un **arpège** de l'accord en cours ;
 - la **batterie** pose kick/snare/hats sur une grille rythmique cohérente.
 
+Chaque génération tire des **gabarits rythmiques** différents (grooves de
+batterie kick/snare/hats + fills, rythmes de basse, phrasés de lead) et le lead
+est **motivique** (un petit motif mélodique inventé puis répété et réancré sur
+les accords) : les phrases varient nettement d'une génération à l'autre tout en
+restant dans le genre.
+
 Relance pour obtenir des variations. Ça remplit le motif courant — tu peux
 ensuite retoucher à la main, dupliquer le motif, l'enchaîner, exporter, etc.
 
