@@ -618,44 +618,65 @@ function keyLabel(rootPC, scale) {
   return `${ROOT_NAMES[rootPC]} ${SCALE_LABELS[scale] || scale}`;
 }
 
+// --- Rhythm template libraries (positions expressed in beats, 4 beats/bar) ---
+const DRUM_KICK = [[0, 2], [0, 1, 2, 3], [0, 2, 2.5], [0, 0.75, 2, 2.5], [0, 2, 3.5], [0, 1.5, 2, 3.5]];
+const DRUM_SNARE = [[1, 3], [1, 3, 3.5], [1, 2.75, 3], [3]];
+const BASS_RHY = {
+  sparse: [[0], [0, 2], [0, 2.5]],
+  normal: [[0, 1, 2, 3], [0, 2, 2.5, 3], [0, 0.5, 2, 2.5], [0, 1.5, 2, 3.5]],
+  dense:  [[0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], [0, 1, 1.5, 2, 3, 3.5], [0, 0.5, 1, 2, 2.5, 3]],
+};
+const LEAD_RHY = {
+  sparse: [[0, 1, 2, 3], [0, 1.5, 2.5], [0, 2, 3], [0, 0.5, 2]],
+  normal: [[0, 0.5, 1, 2, 2.5, 3], [0, 0.75, 1.5, 2, 3, 3.5], [0, 1, 1.5, 2, 2.5, 3.5], [0, 0.5, 1.5, 2, 2.5, 3]],
+  dense:  [[0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], [0, 0.25, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], [0, 0.5, 0.75, 1, 1.5, 2, 2.5, 2.75, 3, 3.5]],
+};
+
+function beatsToSteps(beats, spb, steps) {
+  const set = new Set();
+  for (const b of beats) { const s = Math.round(b * spb); if (s >= 0 && s < steps) set.add(s); }
+  return [...set].sort((a, b) => a - b);
+}
+
 // Fill one pattern object with a coherent phrase. ctx carries the shared key
-// plus this section's density/tracks.
+// plus this section's density/tracks. Rhythms are picked from templates each
+// call, so successive generations vary while staying in the same genre.
 function fillPattern(p, ctx) {
   const { scaleArr, rootPC, prog, steps, spb, numChords, segLen, density, tracks } = ctx;
-  const leadProb = density === 'sparse' ? 0.4 : density === 'dense' ? 0.85 : 0.6;
   const chordAt = (s) => prog[Math.min(numChords - 1, Math.floor(s / segLen))];
 
   if (tracks.drum) {
     for (const lane of DRUM_LANES) p.drum[lane.id] = new Array(steps).fill(false);
     const set = (lane, s) => { if (s >= 0 && s < steps) p.drum[lane][s] = true; };
-    for (let s = 0; s < steps; s++) {
-      if (s % (2 * spb) === 0) set('kick', s);
-      if (s % (2 * spb) === spb) set('snare', s);
+    for (const s of beatsToSteps(rand(DRUM_KICK), spb, steps)) set('kick', s);
+    for (const s of beatsToSteps(rand(DRUM_SNARE), spb, steps)) set('snare', s);
+    // Hats: rate or off-beat variant, scaled by density.
+    const rate = density === 'dense' ? Math.min(4, spb) : density === 'sparse' ? 1 : 2;
+    let hats = [];
+    if (Math.random() < 0.3) { for (let b = 0; b < 4; b++) hats.push(b + 0.5); }      // off-beat
+    else { for (let b = 0; b < 4; b++) for (let k = 0; k < rate; k++) hats.push(b + k / rate); }
+    for (const s of beatsToSteps(hats, spb, steps)) set('hat', s);
+    // Optional ghost kick + end-of-bar fill for variety.
+    if (density !== 'sparse' && Math.random() < 0.5) for (const s of beatsToSteps([rand([0.5, 1.5, 2.5])], spb, steps)) set('kick', s);
+    if (Math.random() < 0.4) {
+      const sub = density === 'dense' ? 4 : 2;
+      for (let k = 0; k < sub; k++) { const st = Math.round((3 + k / sub) * spb); if (st < steps) set(rand(['tom', 'snare']), st); }
+      if (density === 'dense') set('openhat', Math.min(steps - 1, Math.round(3.5 * spb)));
     }
-    const hatEvery = density === 'dense' ? 1 : density === 'sparse' ? spb : Math.max(1, Math.floor(spb / 2));
-    for (let s = 0; s < steps; s += hatEvery) set('hat', s);
-    if (density !== 'sparse') set('kick', Math.floor(2.5 * spb));
-    if (density === 'dense') set('openhat', Math.max(0, steps - spb));
   }
 
   if (tracks.bass) {
     state.meta.bass.arp = 'off';
     p.bass.cells = {};
     const { lo, hi } = PT.bass; const rootMidi = 36 + rootPC;
-    for (let seg = 0; seg < numChords; seg++) {
-      const d = prog[seg];
-      const start = Math.round(seg * segLen);
-      const note = fitRange(degToMidi(rootMidi, scaleArr, d), lo, hi);
-      p.bass.cells[`${note}:${start}`] = true;
-      if (density !== 'sparse') {
-        const mid = Math.round(start + segLen / 2);
-        const fifth = fitRange(degToMidi(rootMidi, scaleArr, d + 4), lo, hi);
-        if (mid < steps) p.bass.cells[`${fifth}:${mid}`] = true;
-      }
-      if (density === 'dense') {
-        const q = Math.round(start + segLen * 0.75);
-        if (q < steps) p.bass.cells[`${note}:${q}`] = true;
-      }
+    for (const s of beatsToSteps(rand(BASS_RHY[density] || BASS_RHY.normal), spb, steps)) {
+      const d = chordAt(s);
+      const r = Math.random();
+      let note;
+      if (r > 0.86) note = fitRange(degToMidi(rootMidi, scaleArr, d) + 12, lo, hi); // octave pop
+      else if (r > 0.74) note = fitRange(degToMidi(rootMidi, scaleArr, d + 4), lo, hi); // fifth
+      else note = fitRange(degToMidi(rootMidi, scaleArr, d), lo, hi);                 // root
+      p.bass.cells[`${note}:${s}`] = true;
     }
   }
 
@@ -663,16 +684,20 @@ function fillPattern(p, ctx) {
     state.meta.lead.arp = 'off';
     p.lead.cells = {};
     const { lo, hi } = PT.lead; const rootMidi = 60 + rootPC;
-    let prevDeg = 0;
-    const eighth = Math.max(1, Math.floor(spb / 2));
-    for (let s = 0; s < steps; s++) {
-      if (s % eighth !== 0) continue;
-      const strong = s % spb === 0;
+    const onsets = beatsToSteps(rand(LEAD_RHY[density] || LEAD_RHY.normal), spb, steps);
+    // A short melodic motif (interval deltas) repeated between beats, re-anchored
+    // to a chord tone on each beat — gives intentional, varied phrases.
+    const motif = Array.from({ length: 2 + Math.floor(Math.random() * 3) }, () => rand([-2, -1, -1, 1, 1, 2, 2, 3]));
+    let deg = rand([0, 2, 4]), mi = 0;
+    for (const s of onsets) {
       const d = chordAt(s);
-      if (!strong && Math.random() >= leadProb) continue;
-      let deg = strong ? rand([d, d + 2, d + 4])
-        : (Math.random() < 0.4 ? rand([d, d + 2, d + 4]) : prevDeg + rand([-2, -1, 1, 2]));
-      prevDeg = deg;
+      if (s % spb === 0) {
+        const tones = [d, d + 2, d + 4];
+        deg = tones.reduce((best, t) => Math.abs(t - deg) < Math.abs(best - deg) ? t : best, tones[0]);
+        mi = 0;
+      } else {
+        deg += motif[mi % motif.length]; mi++;
+      }
       p.lead.cells[`${fitRange(degToMidi(rootMidi, scaleArr, deg), lo, hi)}:${s}`] = true;
     }
   }
@@ -681,10 +706,18 @@ function fillPattern(p, ctx) {
     state.meta.lead2.arp = 'off';
     p.lead2.cells = {};
     const { lo, hi } = PT.lead2; const rootMidi = 60 + rootPC;
-    for (let s = 0; s < steps; s++) {
+    const dir = rand(['up', 'down', 'updown']);
+    const rate = density === 'dense' ? Math.min(4, spb) : density === 'sparse' ? 1 : 2;
+    const gate = [];
+    for (let b = 0; b < 4; b++) for (let k = 0; k < rate; k++) gate.push(b + k / rate);
+    let i = 0;
+    for (const s of beatsToSteps(gate, spb, steps)) {
       const d = chordAt(s);
-      const triad = [d, d + 2, d + 4];
-      p.lead2.cells[`${fitRange(degToMidi(rootMidi, scaleArr, triad[s % 3]), lo, hi)}:${s}`] = true;
+      let seq = [d, d + 2, d + 4];
+      if (dir === 'down') seq = [d + 4, d + 2, d];
+      else if (dir === 'updown') seq = [d, d + 2, d + 4, d + 2];
+      p.lead2.cells[`${fitRange(degToMidi(rootMidi, scaleArr, seq[i % seq.length]), lo, hi)}:${s}`] = true;
+      i++;
     }
   }
 }
