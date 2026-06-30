@@ -43,6 +43,9 @@ const engine = new ChiptuneEngine();
 let state = normalizeState(loadAutosave() || {});
 let playingPattern = -1;
 let playingPos = -1;
+let loopSection = false; // when true, playback loops only the edit pattern
+
+function currentChain() { return loopSection ? [state.editPattern] : state.chain; }
 
 function emptyPattern(steps) {
   const drum = {};
@@ -286,7 +289,11 @@ function renderPatternsRow() {
       + (i === state.editPattern ? ' editing' : '')
       + (i === playingPattern ? ' playing' : '');
     chip.textContent = patternLetter(i);
-    chip.addEventListener('click', () => { state.editPattern = i; saveState(); renderAll(); });
+    chip.addEventListener('click', () => {
+      state.editPattern = i;
+      if (loopSection && engine.isPlaying) engine.setChain(currentChain());
+      saveState(); renderAll();
+    });
     chips.appendChild(chip);
   });
   row.appendChild(chips);
@@ -325,7 +332,7 @@ function renderChainRow() {
   chips.className = 'chips chain';
   state.chain.forEach((patIdx, pos) => {
     const chip = document.createElement('button');
-    chip.className = 'chip slot' + (pos === playingPos ? ' playing' : '');
+    chip.className = 'chip slot' + (!loopSection && pos === playingPos ? ' playing' : '');
     chip.textContent = patternLetter(patIdx);
     chip.title = 'Retirer de la chaîne';
     chip.addEventListener('click', () => {
@@ -1347,6 +1354,12 @@ function renderPitchTrack(t) {
   return wrap;
 }
 
+// Update one cell's visual state in place (no full re-render -> keeps scroll).
+function setCellActive(trackId, midi, step, active) {
+  const el = tracksEl.querySelector(`[data-track="${trackId}"] .cell[data-step="${step}"][data-midi="${midi}"]`);
+  if (el) el.classList.toggle('active', active);
+}
+
 function togglePitch(t, rootMidi, step) {
   const m = state.meta[t.id];
   const cells = editP()[t.id].cells;
@@ -1355,23 +1368,22 @@ function togglePitch(t, rootMidi, step) {
 
   if (!shape) {
     const key = `${rootMidi}:${step}`;
-    if (cells[key]) delete cells[key];
+    if (cells[key]) { delete cells[key]; setCellActive(t.id, rootMidi, step, false); }
     else {
-      cells[key] = true;
+      cells[key] = true; setCellActive(t.id, rootMidi, step, true);
       engine.preview({ kind: 'tone', freq: midiToFreq(rootMidi), dur: previewDur(), gain: g, type: m.type, duty: m.duty });
     }
   } else {
     const notes = shape.map(o => rootMidi + o).filter(n => n >= t.lo && n <= t.hi);
-    const rootKey = `${rootMidi}:${step}`;
-    if (cells[rootKey]) {
-      for (const n of notes) delete cells[`${n}:${step}`];
+    if (cells[`${rootMidi}:${step}`]) {
+      for (const n of notes) { delete cells[`${n}:${step}`]; setCellActive(t.id, n, step, false); }
     } else {
-      for (const n of notes) cells[`${n}:${step}`] = true;
+      for (const n of notes) { cells[`${n}:${step}`] = true; setCellActive(t.id, n, step, true); }
       for (const n of notes) engine.preview({ kind: 'tone', freq: midiToFreq(n), dur: previewDur(), gain: g * 0.8, type: m.type, duty: m.duty });
     }
   }
   saveState();
-  renderTracks();
+  updateBadge(t.id);
 }
 
 function updateBadge(id) {
@@ -1421,10 +1433,18 @@ playBtn.addEventListener('click', () => {
     engine.stop();
     playBtn.classList.remove('playing'); playBtn.textContent = '▶';
   } else {
-    engine.setChain(state.chain);
+    engine.setChain(currentChain());
     engine.start();
     playBtn.classList.add('playing'); playBtn.textContent = '■';
   }
+});
+
+const loopBtn = document.getElementById('loop');
+loopBtn.addEventListener('click', () => {
+  loopSection = !loopSection;
+  loopBtn.classList.toggle('on', loopSection);
+  if (engine.isPlaying) engine.setChain(currentChain());
+  renderSong();
 });
 
 bpmInput.addEventListener('input', () => {

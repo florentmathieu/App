@@ -27,6 +27,13 @@ visuellement sur une grille de pas :
 - **Sauvegarde automatique** (localStorage) — ta compo est conservée
 - **Fonctionne hors-ligne** une fois chargée (service worker)
 
+### Boucler une seule section (🔁)
+
+Le bouton **🔁** (barre de transport) met en boucle **uniquement le motif en
+cours d'édition** (la lettre sélectionnée), au lieu de jouer toute la chaîne —
+pratique pour peaufiner une section. Reclique pour revenir à la lecture de la
+chaîne complète. Tu peux changer de lettre pendant la boucle.
+
 ### Composer avec les motifs et la chaîne
 
 1. Le bloc **Motifs** liste tes motifs (A, B, …). Touche une lettre pour
