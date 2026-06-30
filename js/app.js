@@ -31,7 +31,8 @@ const DRUM_MIDI = { kick: 36, snare: 38, hat: 42, openhat: 46, clap: 39, tom: 45
 const MIDI_PROGRAM = { bass: 38, lead: 80, lead2: 81 }; // synth bass, square lead, saw lead
 
 const CHORDS = { off: null, maj: [0, 4, 7], min: [0, 3, 7] };
-const STEP_OPTIONS = [8, 16, 32];
+const STEP_OPTIONS = [8, 12, 16, 24, 32]; // 12 & 24 = ternary grids (triolets)
+const TERNARY_STEPS = [12, 24];
 const STORAGE_KEY = 'chiptune-mvp-v3';
 const OLD_KEYS = ['chiptune-mvp-v2'];
 const LIBRARY_KEY = 'chiptune-songs-v1';
@@ -67,7 +68,7 @@ function normalizeState(s) {
   for (const t of PITCHED_TRACKS) {
     s.meta[t.id] = Object.assign(
       { expanded: false, muted: false, solo: false, type: t.defType, chord: 'off', volume: t.vol,
-        duty: 0.5, arp: 'off', arpRate: 4 },
+        duty: 0.5, arp: 'off', arpRate: 2 },
       s.meta[t.id] || {}
     );
   }
@@ -211,10 +212,18 @@ engine.stepProvider = (step, patternIndex) => {
 
     if (m.arp && m.arp !== 'off') {
       notes.sort((a, b) => a - b);
+      // Only fire at the start of a held chord, then cycle the tones across the
+      // whole held run at `arpRate` notes per step. Holding the chord (adjacent
+      // cells) makes the arpeggio slower/longer; on a ternary grid it's triplets.
+      const isCont = step > 0 && notes.every(n => cells[`${n}:${step - 1}`]);
+      if (isCont) continue;
+      let len = 1;
+      while (step + len < state.steps && notes.every(n => cells[`${n}:${step + len}`])) len++;
       const order = arpOrder(notes, m.arp);
-      const div = Math.max(2, m.arpRate || 4);
-      const sub = secPerStep / div;
-      for (let i = 0; i < div; i++) {
+      const perStep = Math.max(1, m.arpRate || 2);
+      const sub = secPerStep / perStep;
+      const count = len * perStep;
+      for (let i = 0; i < count; i++) {
         const midi = order[i % order.length];
         voices.push({ kind: 'tone', freq: midiToFreq(midi), dur: sub * 0.9, gain: g, type: m.type, duty: m.duty, offset: i * sub });
       }
@@ -509,15 +518,22 @@ function buildMidiBlob() {
           (byStep[s] = byStep[s] || []).push(midi);
         }
         for (const s of Object.keys(byStep)) {
-          const stepTick = start + Number(s) * ticksPerStep;
-          const notes = byStep[s].sort((a, b) => a - b);
+          const step = Number(s);
+          const notes = byStep[s].slice().sort((a, b) => a - b);
+          // start-of-run only, cycle across the held chord (matches playback)
+          if (step > 0 && notes.every(n => active(n, step - 1))) continue;
+          let len = 1;
+          while (step + len < state.steps && notes.every(n => active(n, step + len))) len++;
           const order = arpOrder(notes, m.arp);
-          const div = Math.max(2, m.arpRate || 4);
-          const sub = ticksPerStep / div;
-          for (let j = 0; j < div; j++) {
+          const perStep = Math.max(1, m.arpRate || 2);
+          const sub = ticksPerStep / perStep;
+          const count = len * perStep;
+          for (let j = 0; j < count; j++) {
             const note = order[j % order.length];
-            ev.push({ tick: stepTick + Math.floor(j * sub), order: 1, data: [0x90 | chan, note, vel] });
-            ev.push({ tick: stepTick + Math.floor((j + 1) * sub), order: 0, data: [0x80 | chan, note, 0] });
+            const on = start + Math.round(step * ticksPerStep + j * sub);
+            const off = start + Math.round(step * ticksPerStep + (j + 1) * sub);
+            ev.push({ tick: on, order: 1, data: [0x90 | chan, note, vel] });
+            ev.push({ tick: off, order: 0, data: [0x80 | chan, note, 0] });
           }
         }
       } else {
@@ -1177,7 +1193,7 @@ function renderTracks() {
   lastStep = -1;
 }
 
-function beatClass(step) { return step % 4 === 0 ? ' beat' : ''; }
+function beatClass(step) { return step % (state.steps / 4) === 0 ? ' beat' : ''; }
 
 function volumeControl(id) {
   const row = document.createElement('div');
@@ -1330,7 +1346,7 @@ function renderPitchTrack(t) {
     const sep = document.createElement('span');
     sep.className = 'tools-label sep'; sep.textContent = 'Vitesse';
     arpRow.appendChild(sep);
-    for (const r of [2, 3, 4]) {
+    for (const r of [1, 2, 3, 4]) {
       const b = document.createElement('button');
       b.className = 'pill' + (m.arpRate === r ? ' on' : '');
       b.textContent = '×' + r;
@@ -1488,7 +1504,8 @@ clearBtn.addEventListener('click', () => {
 
 for (const opt of STEP_OPTIONS) {
   const o = document.createElement('option');
-  o.value = String(opt); o.textContent = `${opt} pas`;
+  o.value = String(opt);
+  o.textContent = TERNARY_STEPS.includes(opt) ? `${opt} pas ⟨ternaire⟩` : `${opt} pas`;
   stepsSel.appendChild(o);
 }
 
