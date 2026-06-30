@@ -138,6 +138,12 @@ select {
   font-size: 12px; cursor: pointer; flex: 0 0 auto;
 }
 .mute.on { background: #3a1f2b; border-color: #ff5d73; color: #ff96a5; }
+.solo {
+  border: 1px solid var(--line); background: var(--panel2);
+  color: var(--muted); border-radius: 8px; padding: 5px 9px;
+  font-size: 12px; font-weight: 700; cursor: pointer; flex: 0 0 auto;
+}
+.solo.on { background: #3a341a; border-color: #ffd166; color: #ffd166; }
 
 .track-body {
   padding: 4px 12px 14px;
