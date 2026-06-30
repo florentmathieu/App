@@ -42,6 +42,13 @@ appui sur une case pose l'accord complet (les notes hors de la plage visible
 sont ignorées). Repose la fondamentale pour effacer l'accord. Mode **Note** =
 saisie note par note (polyphonie libre possible).
 
+### Notes tenues (sustain)
+
+Sur une piste mélodique, **active plusieurs cases voisines sur la même ligne** :
+elles se jouent comme **une seule note tenue** (pas de redéclenchement à chaque
+pas). Valable en lecture, à l'export **WAV/MP3** et en **MIDI** (une seule note
+de la bonne durée). Les arpèges (mode Arpège) restent, eux, redéclenchés.
+
 ### Volume par piste
 
 Chaque piste a un **curseur de volume** (visible quand elle est dépliée),

@@ -207,7 +207,12 @@ engine.stepProvider = (step, patternIndex) => {
       }
     } else {
       for (const midi of notes) {
-        voices.push({ kind: 'tone', freq: midiToFreq(midi), dur, gain: g, type: m.type, duty: m.duty });
+        // Sustain: a run of adjacent active cells on the same row = one held
+        // note. Only trigger at the run's start; skip continuations.
+        if (step > 0 && cells[`${midi}:${step - 1}`]) continue;
+        let len = 1;
+        while (step + len < state.steps && cells[`${midi}:${step + len}`]) len++;
+        voices.push({ kind: 'tone', freq: midiToFreq(midi), dur: secPerStep * len * 0.95, gain: g, type: m.type, duty: m.duty });
       }
     }
   }
@@ -475,32 +480,37 @@ function buildMidiBlob() {
     for (let cp = 0; cp < state.chain.length; cp++) {
       const p = state.patterns[state.chain[cp]];
       const start = cp * barTicks;
-      const byStep = {};
       const cells = p[t.id].cells;
-      for (const k of Object.keys(cells)) {
-        if (!cells[k]) continue;
-        const [midi, s] = k.split(':').map(Number);
-        (byStep[s] = byStep[s] || []).push(midi);
-      }
-      for (const s of Object.keys(byStep)) {
-        const stepTick = start + Number(s) * ticksPerStep;
-        let notes = byStep[s];
-        if (m.arp && m.arp !== 'off') {
-          notes.sort((a, b) => a - b);
+      const active = (midi, s) => !!cells[`${midi}:${s}`];
+      if (m.arp && m.arp !== 'off') {
+        const byStep = {};
+        for (const k of Object.keys(cells)) {
+          if (!cells[k]) continue;
+          const [midi, s] = k.split(':').map(Number);
+          (byStep[s] = byStep[s] || []).push(midi);
+        }
+        for (const s of Object.keys(byStep)) {
+          const stepTick = start + Number(s) * ticksPerStep;
+          const notes = byStep[s].sort((a, b) => a - b);
           const order = arpOrder(notes, m.arp);
           const div = Math.max(2, m.arpRate || 4);
           const sub = ticksPerStep / div;
           for (let j = 0; j < div; j++) {
             const note = order[j % order.length];
-            const on = stepTick + Math.floor(j * sub);
-            const off = stepTick + Math.floor((j + 1) * sub);
-            ev.push({ tick: on, order: 1, data: [0x90 | chan, note, vel] });
-            ev.push({ tick: off, order: 0, data: [0x80 | chan, note, 0] });
+            ev.push({ tick: stepTick + Math.floor(j * sub), order: 1, data: [0x90 | chan, note, vel] });
+            ev.push({ tick: stepTick + Math.floor((j + 1) * sub), order: 0, data: [0x80 | chan, note, 0] });
           }
-        } else {
-          for (const note of notes) {
-            ev.push({ tick: stepTick, order: 1, data: [0x90 | chan, note, vel] });
-            ev.push({ tick: stepTick + ticksPerStep, order: 0, data: [0x80 | chan, note, 0] });
+        }
+      } else {
+        // Merge runs of adjacent same-pitch cells into sustained MIDI notes.
+        const midis = new Set(Object.keys(cells).filter(k => cells[k]).map(k => +k.split(':')[0]));
+        for (const midi of midis) {
+          for (let s = 0; s < state.steps; s++) {
+            if (!active(midi, s) || (s > 0 && active(midi, s - 1))) continue;
+            let len = 1;
+            while (s + len < state.steps && active(midi, s + len)) len++;
+            ev.push({ tick: start + s * ticksPerStep, order: 1, data: [0x90 | chan, midi, vel] });
+            ev.push({ tick: start + (s + len) * ticksPerStep, order: 0, data: [0x80 | chan, midi, 0] });
           }
         }
       }
