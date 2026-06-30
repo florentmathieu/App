@@ -63,10 +63,10 @@ function normalizeState(s) {
   s.steps = STEP_OPTIONS.includes(s.steps) ? s.steps : 16;
 
   s.meta = s.meta || {};
-  s.meta.drum = Object.assign({ expanded: true, muted: false, volume: 0.9 }, s.meta.drum || {});
+  s.meta.drum = Object.assign({ expanded: true, muted: false, solo: false, volume: 0.9 }, s.meta.drum || {});
   for (const t of PITCHED_TRACKS) {
     s.meta[t.id] = Object.assign(
-      { expanded: false, muted: false, type: t.defType, chord: 'off', volume: t.vol,
+      { expanded: false, muted: false, solo: false, type: t.defType, chord: 'off', volume: t.vol,
         duty: 0.5, arp: 'off', arpRate: 4 },
       s.meta[t.id] || {}
     );
@@ -169,8 +169,18 @@ function applyState(s) {
 }
 
 // ============================================================================
-// Sequencer data -> voices (volume + mute baked in here)
+// Sequencer data -> voices (volume + mute/solo baked in here)
 // ============================================================================
+const ALL_TRACK_IDS = ['drum', ...PITCHED_TRACKS.map(t => t.id)];
+let exporting = false; // solo affects live monitoring only, not exports
+function anySolo() { return ALL_TRACK_IDS.some(id => state.meta[id].solo); }
+function isAudible(id) {
+  const m = state.meta[id];
+  if (m.muted) return false;
+  if (!exporting && anySolo() && !m.solo) return false;
+  return true;
+}
+
 engine.stepProvider = (step, patternIndex) => {
   const p = state.patterns[patternIndex];
   if (!p) return [];
@@ -179,7 +189,7 @@ engine.stepProvider = (step, patternIndex) => {
   const dur = secPerStep * 0.9;
 
   const dm = state.meta.drum;
-  if (!dm.muted) {
+  if (isAudible('drum')) {
     for (const lane of DRUM_LANES) {
       if (p.drum[lane.id] && p.drum[lane.id][step]) {
         voices.push({ kind: lane.kind, gain: lane.gain * dm.volume });
@@ -188,7 +198,7 @@ engine.stepProvider = (step, patternIndex) => {
   }
   for (const t of PITCHED_TRACKS) {
     const m = state.meta[t.id];
-    if (m.muted) continue;
+    if (!isAudible(t.id)) continue;
     const g = t.base * m.volume;
     const cells = p[t.id].cells;
     const notes = [];
@@ -386,6 +396,7 @@ async function doExport(fmt, btn) {
   engine.setBpm(state.bpm); engine.setSteps(state.steps); engine.setChain(state.chain);
   const orig = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Rendu…'; }
+  exporting = true; // ignore solo when bouncing
   try {
     const blob = fmt === 'mp3' ? await engine.renderMp3(160) : await engine.renderWav();
     downloadBlob(blob, `${safeName()}.${fmt}`);
@@ -393,6 +404,7 @@ async function doExport(fmt, btn) {
   } catch (e) {
     alert('Export échoué : ' + (e && e.message ? e.message : e));
   } finally {
+    exporting = false;
     if (btn) { btn.disabled = false; btn.textContent = orig; }
   }
 }
@@ -1194,6 +1206,7 @@ function trackShell(id, title, accent, badge) {
     <span class="dot"></span>
     <span class="track-name">${title}</span>
     <span class="track-badge">${badge}</span>
+    <button class="solo ${m.solo ? 'on' : ''}" title="Solo">S</button>
     <button class="mute ${m.muted ? 'on' : ''}">${m.muted ? 'Muet' : 'Son'}</button>
   `;
   const toggle = () => { m.expanded = !m.expanded; saveState(); renderTracks(); };
@@ -1201,6 +1214,12 @@ function trackShell(id, title, accent, badge) {
   header.querySelector('.track-name').addEventListener('click', toggle);
   header.querySelector('.mute').addEventListener('click', (e) => {
     e.stopPropagation(); m.muted = !m.muted; saveState(); renderTracks();
+  });
+  header.querySelector('.solo').addEventListener('click', (e) => {
+    e.stopPropagation();
+    m.solo = !m.solo;
+    e.currentTarget.classList.toggle('on', m.solo);
+    saveState();
   });
   wrap.appendChild(header);
   return wrap;
