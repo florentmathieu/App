@@ -78,10 +78,19 @@ square de la NES (le 50% est l'onde carrée classique). Implémenté via
 ### Arpégiateur
 
 Bouton **Arpège** par piste mélodique : **Off / ↑ / ↓ / ↕**, avec une
-**Vitesse** (×2 / ×3 / ×4 notes par pas). Quand il est actif, les notes posées
-sur un même pas (par ex. un accord stampé) sont jouées en séquence rapide à
-l'intérieur du pas — l'effet « arpège chiptune » classique. Combine-le avec le
-pinceau Majeur/Mineur pour des arpèges instantanés.
+**Vitesse** (×1 / ×2 / ×3 / ×4 notes par pas). L'arpège **cycle les notes de
+l'accord sur toute sa durée tenue** :
+- pose un accord sur **un seul pas** → arpège rapide à l'intérieur du pas ;
+- **tiens l'accord** sur plusieurs pas (cases voisines) + vitesse **×1** →
+  arpège **lent**, une note par pas qui défile.
+
+Combine avec le pinceau Majeur/Mineur pour des arpèges instantanés.
+
+### Grilles binaires & ternaires
+
+Le sélecteur **Pas** propose 8 / 16 / 32 (binaire) et **12 / 24 ⟨ternaire⟩**.
+Les grilles ternaires (3 ou 6 pas par temps) permettent de programmer des
+**triolets / swing à la main**, et la génération auto en hérite aussi.
 
 ### Clavier MIDI en direct (🎹)
 
