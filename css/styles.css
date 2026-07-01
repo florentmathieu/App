@@ -366,13 +366,16 @@ input[type="range"].vol { flex: 1 1 auto; max-width: 220px; }
 .track { --accent: #6c7bff; }
 .track .dot { background: var(--accent); }
 
-/* ---------- Desktop: keep cells as small squares (don't stretch full width) --- */
+/* ---------- Desktop: compact cells (fixed width, half-height) --- */
 @media (min-width: 680px) {
   .cells {
     grid-template-columns: repeat(var(--steps), 34px);
     flex: 0 0 auto;          /* don't stretch across the panel */
     justify-content: start;
+    gap: 3px;
   }
-  .grid-row { justify-content: flex-start; }
+  .grid { gap: 3px; }       /* tighter rows vertically */
+  .grid-row { justify-content: flex-start; gap: 8px; }
+  .cell { aspect-ratio: auto; height: 17px; }   /* half the vertical size */
   .piano-grid { max-height: 60vh; }
 }
