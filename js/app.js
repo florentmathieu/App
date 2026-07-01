@@ -1233,8 +1233,15 @@ function trackShell(id, title, accent, badge) {
   });
   header.querySelector('.solo').addEventListener('click', (e) => {
     e.stopPropagation();
-    m.solo = !m.solo;
-    e.currentTarget.classList.toggle('on', m.solo);
+    // Exclusive solo: activating a track clears the others (one at a time).
+    const turnOn = !m.solo;
+    for (const id of ALL_TRACK_IDS) state.meta[id].solo = false;
+    m.solo = turnOn;
+    // Reflect on every solo button without a full re-render (keeps scroll).
+    tracksEl.querySelectorAll('.track').forEach(sec => {
+      const btn = sec.querySelector('.solo');
+      if (btn) btn.classList.toggle('on', state.meta[sec.dataset.track].solo);
+    });
     saveState();
   });
   wrap.appendChild(header);
